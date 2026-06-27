@@ -8,7 +8,7 @@ const GRAVITY = 0.266;
 const JUMP_VY = -11.2;
 const PLAYER_W = 65;
 const PLAYER_H = 70;
-const PLAYER_SPEED = 2.75;
+const PLAYER_SPEED = 4.5;
 const PLAT_H = 16;
 const CAMERA_LEAD = 0.38; // player at this fraction from top
 
@@ -2085,7 +2085,7 @@ export default function OpPotatoGame() {
     };
     soundsRef.current = {
       jump:         load("/sounds/Jump.wav",          false, 0.50),
-      hazardSizzle: load("/sounds/Hazard_sizzle.mp3", false, 0.70),
+      hazardSizzle: load("/sounds/Hazard_Sizzle.mp3", false, 0.70),
       mashed:       load("/sounds/Mashed.wav",        false, 0.80),
       powerUp:      load("/sounds/PowerUP.ogg",       false, 0.75),
       bgMusic:      load("/sounds/loop.ogg",          true,  0.35),
