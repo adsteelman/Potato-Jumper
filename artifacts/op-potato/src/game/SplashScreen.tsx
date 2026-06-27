@@ -57,17 +57,17 @@ export function SplashScreen({ onStart, onHelp, adBannerH }: Props) {
         onTransitionEnd={() => { if (fadingOut) onStart(); }}
       >
         {/* Decorative clouds */}
-        <div style={{
-          position: "absolute", top: "6%", left: "5%",
-          width: 90, height: 55, opacity: 0.7,
-          background: "white", borderRadius: 50,
-          boxShadow: "20px 0 0 10px white, 40px -5px 0 5px white",
+        <img src="/sprites/cloud.png" draggable={false} style={{
+          position: "absolute", top: "5%", left: "3%",
+          width: 140, opacity: 0.82,
+          filter: "drop-shadow(3px 5px 6px rgba(0,0,0,0.10))",
+          pointerEvents: "none",
         }} />
-        <div style={{
-          position: "absolute", top: "12%", right: "8%",
-          width: 70, height: 42, opacity: 0.6,
-          background: "white", borderRadius: 50,
-          boxShadow: "16px 0 0 8px white, 30px -4px 0 4px white",
+        <img src="/sprites/cloud.png" draggable={false} style={{
+          position: "absolute", top: "11%", right: "4%",
+          width: 108, opacity: 0.70,
+          filter: "drop-shadow(2px 4px 5px rgba(0,0,0,0.08))",
+          pointerEvents: "none",
         }} />
 
         {/* Title graphic */}
