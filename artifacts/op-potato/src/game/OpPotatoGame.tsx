@@ -528,7 +528,7 @@ function drawPotato(
   const totalScale = STAGE_SCALES[si] * (1 + flexBump);
   const pw = PLAYER_W * totalScale;
   const ph = PLAYER_H * totalScale * stretchY;
-  const wobX = Math.sin(wobble) * (1.75 - si * 0.2);
+  const wobX = Math.sin(wobble) * 0;
 
   // ── SPRITE DRAWING (when images are loaded) ───────────────────────────────
   if (sprites) {
@@ -1859,8 +1859,8 @@ function tickGame(gs: GameState, tiltX: number, tapDir: number, dt: number, onSo
       const sy = plat.y - gs.cameraY; // screen Y of platform
       const platTop = plat.y;
       if (
-        playerBottom >= platTop - 2 &&
-        playerBottom <= platTop + player.vy + 8 &&
+        playerBottom >= platTop - 4 &&
+        playerBottom <= platTop + player.vy + 16 &&
         playerRight > plat.x &&
         playerLeft < plat.x + plat.w
       ) {
