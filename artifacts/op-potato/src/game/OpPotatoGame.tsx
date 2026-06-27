@@ -2095,7 +2095,8 @@ export default function OpPotatoGame() {
 
   const playOneShot = useCallback((el: HTMLAudioElement | null) => {
     if (!el) return;
-    (el.cloneNode() as HTMLAudioElement).play().catch(() => {});
+    el.currentTime = 0;
+    el.play().catch(() => {});
   }, []);
 
   const fetchLeaderboard = useCallback(async () => {

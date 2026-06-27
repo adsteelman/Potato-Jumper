@@ -9,7 +9,7 @@ const HEADING = "#3d2200";
 const BODY = "#4a3000";
 const FONT = "'Fredoka One', cursive";
 
-function Section({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{
       background: CARD,
@@ -19,8 +19,7 @@ function Section({ title, icon, children }: { title: string; icon: string; child
       boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
       border: "1.5px solid rgba(255,255,255,0.8)",
     }}>
-      <div style={{ fontSize: 18, color: HEADING, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 22 }}>{icon}</span>
+      <div style={{ fontSize: 18, color: HEADING, marginBottom: 10 }}>
         {title}
       </div>
       {children}
@@ -110,44 +109,56 @@ export function HelpScreen({ onBack, adBannerH }: Props) {
       }}>
 
         {/* Controls */}
-        <Section title="Controls" icon="🕹️">
+        <Section title="Controls">
           <Row sprite="/sprites/potato-3.png" label="Tilt your phone left or right to steer" />
           <Row label="Or tap the left / right side of the screen" />
         </Section>
 
         {/* Buff Stages */}
-        <Section title="Buff Stages" icon="💪">
+        <Section title="Buff Stages">
           <div style={{ fontSize: 13, color: BODY, opacity: 0.8, marginBottom: 10 }}>
             Climb higher to power up. Fall back and you'll lose buffs!
           </div>
-          <StageRow sprite="/sprites/potato-1.png" name="Raw"      desc="Just a spud. Keep jumping!" />
-          <StageRow sprite="/sprites/potato-2.png" name="Fresh"    desc="Getting warmed up." />
-          <StageRow sprite="/sprites/potato-3.png" name="Cookin'"  desc="Things are heating up." />
-          <StageRow sprite="/sprites/potato-4.png" name="Buff"     desc="Fully juiced potato." />
+          <StageRow sprite="/sprites/potato-1.png" name="Raw"       desc="Just a spud. Keep jumping!" />
+          <StageRow sprite="/sprites/potato-2.png" name="Fresh"     desc="Getting warmed up." />
+          <StageRow sprite="/sprites/potato-3.png" name="Cookin'"   desc="Things are heating up." />
+          <StageRow sprite="/sprites/potato-4.png" name="Buff"      desc="Fully juiced potato." />
           <StageRow sprite="/sprites/potato-5.png" name="OP POTATO" desc="Max power — you made it!" />
         </Section>
 
+        {/* Fry Buff Stages */}
+        <Section title="Fry Buff Stages">
+          <div style={{ fontSize: 13, color: BODY, opacity: 0.8, marginBottom: 10 }}>
+            Getting hit turns you into a fry — but you can still level up!
+          </div>
+          <StageRow sprite="/sprites/fry-1.png" name="Raw Fry"      desc="Freshly fried. Stay alive!" />
+          <StageRow sprite="/sprites/fry-2.png" name="Fresh Fry"    desc="Getting crispy." />
+          <StageRow sprite="/sprites/fry-3.png" name="Cookin' Fry"  desc="Golden and dangerous." />
+          <StageRow sprite="/sprites/fry-4.png" name="Buff Fry"     desc="Extra crispy power." />
+          <StageRow sprite="/sprites/fry-5.png" name="OP FRY!"      desc="Won as a fry — true warrior!" />
+        </Section>
+
         {/* Platforms */}
-        <Section title="Platforms" icon="🪵">
-          <Row sprite="/sprites/platform-board.png"      label="Cutting Board"  sub="Safe. Common at the start." />
-          <Row sprite="/sprites/platform-sack.png"       label="Potato Sack"    sub="Safe. Mix of early and mid game." />
-          <Row sprite="/sprites/platform-countertop.png" label="Countertop"     sub="Solid shelf. Mid game." />
-          <Row sprite="/sprites/platform-bakingsheet.png" label="Baking Sheet"  sub="Late game — things are hot!" />
-          <Row sprite="/sprites/platform-heal.png"       label="Bandaid Platform" sub="Rare! Heals you back to potato if you're a fry." />
+        <Section title="Platforms">
+          <Row sprite="/sprites/platform-board.png"       label="Cutting Board"    sub="Safe. Common at the start." />
+          <Row sprite="/sprites/platform-sack.png"        label="Potato Sack"      sub="Safe. Mix of early and mid game." />
+          <Row sprite="/sprites/platform-countertop.png"  label="Countertop"       sub="Solid shelf. Mid game." />
+          <Row sprite="/sprites/platform-bakingsheet.png" label="Baking Sheet"     sub="Late game — things are hot!" />
+          <Row sprite="/sprites/platform-heal.png"        label="Bandaid Platform" sub="Rare! Heals you back to potato if you're a fry." />
         </Section>
 
         {/* Hazards */}
-        <Section title="Hazards" icon="⚠️">
+        <Section title="Hazards">
           <div style={{ fontSize: 13, color: BODY, opacity: 0.8, marginBottom: 10 }}>
             Dodge these — touching them hurts!
           </div>
-          <Row sprite="/sprites/hazard-grater.png"  label="Cheese Grater"  sub="Floats in your path. Avoid!" />
-          <Row sprite="/sprites/hazard-peeler.png"  label="Potato Peeler"  sub="Watch out mid-air." />
-          <Row sprite="/sprites/hazard-pot.png"     label="Boiling Pot"    sub="Hazard near the top tiers." />
+          <Row sprite="/sprites/hazard-grater.png" label="Cheese Grater" sub="Floats in your path. Avoid!" />
+          <Row sprite="/sprites/hazard-peeler.png" label="Potato Peeler" sub="Watch out mid-air." />
+          <Row sprite="/sprites/hazard-pot.png"    label="Boiling Pot"   sub="Hazard near the top tiers." />
         </Section>
 
         {/* Getting Hit */}
-        <Section title="Getting Hit" icon="🤕">
+        <Section title="Getting Hit">
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
             <img src="/sprites/potato-1.png" style={{ width: 38, height: 38, objectFit: "contain" }} />
             <span style={{ fontSize: 20, color: HEADING }}>→</span>
@@ -157,13 +168,13 @@ export function HelpScreen({ onBack, adBannerH }: Props) {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <img src="/sprites/fry-1.png" style={{ width: 38, height: 38, objectFit: "contain" }} />
             <span style={{ fontSize: 20, color: "#c0392b" }}>→</span>
-            <span style={{ fontSize: 26 }}>💀</span>
+            <img src="/sprites/game-over.png" style={{ width: 52, height: 38, objectFit: "contain" }} />
             <span style={{ fontSize: 13, color: BODY, flex: 1, marginLeft: 6 }}>Second hit as a fry = MASHED. Game over!</span>
           </div>
         </Section>
 
         {/* Healing */}
-        <Section title="Healing" icon="💊">
+        <Section title="Healing">
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <img src="/sprites/fry-1.png"          style={{ width: 38, height: 38, objectFit: "contain" }} />
             <span style={{ fontSize: 16, color: HEADING }}>+</span>
