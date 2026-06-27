@@ -4,7 +4,7 @@ import { HelpScreen } from "./HelpScreen";
 
 const CANVAS_W = 420;
 const CANVAS_H = 760;
-const GRAVITY = 0.266;
+const GRAVITY = 0.4;
 const JUMP_VY = -11.2;
 const PLAYER_W = 65;
 const PLAYER_H = 70;
@@ -528,7 +528,7 @@ function drawPotato(
   const totalScale = STAGE_SCALES[si] * (1 + flexBump);
   const pw = PLAYER_W * totalScale;
   const ph = PLAYER_H * totalScale * stretchY;
-  const wobX = Math.sin(wobble) * (3.5 - si * 0.4);
+  const wobX = Math.sin(wobble) * (1.75 - si * 0.2);
 
   // ── SPRITE DRAWING (when images are loaded) ───────────────────────────────
   if (sprites) {
@@ -2095,6 +2095,7 @@ export default function OpPotatoGame() {
 
   const playOneShot = useCallback((el: HTMLAudioElement | null) => {
     if (!el) return;
+    if (el === soundsRef.current.bgMusic) return; // never reset the loop
     el.currentTime = 0;
     el.play().catch(() => {});
   }, []);
