@@ -103,6 +103,8 @@ interface GameState {
   tiltX: number; // current tilt value -1..1
   tapDir: number; // -1, 0, 1
   showSettings: boolean;
+  musicOn: boolean;
+  soundOn: boolean;
   nextId: number;
   bgPhase: number;
   jumpFlash: number;
@@ -123,6 +125,28 @@ function buffLevelForScore(score: number): number {
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
+}
+
+const MUSIC_PREF_KEY = "oppotato:musicOn";
+const SOUND_PREF_KEY = "oppotato:soundOn";
+
+function loadAudioPref(key: string): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const v = window.localStorage.getItem(key);
+    return v === null ? true : v === "true";
+  } catch {
+    return true;
+  }
+}
+
+function saveAudioPref(key: string, value: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch {
+    // localStorage unavailable — preference just won't persist across reloads
+  }
 }
 
 function initPlatforms(startY: number): { platforms: Platform[]; nextId: number } {
@@ -178,6 +202,8 @@ function makeInitialState(bestScore: number): GameState {
     tiltX: 0,
     tapDir: 0,
     showSettings: false,
+    musicOn: loadAudioPref(MUSIC_PREF_KEY),
+    soundOn: loadAudioPref(SOUND_PREF_KEY),
     nextId,
     bgPhase: 0,
     jumpFlash: 0,
@@ -1244,23 +1270,21 @@ function drawDeadScreen(ctx: CanvasRenderingContext2D, score: number, bestScore:
 function drawSettingsPanel(
   ctx: CanvasRenderingContext2D,
   controlMode: "tilt" | "tap",
-  onClose: () => void,
-  _onTiltToggle: () => void
+  musicOn: boolean,
+  soundOn: boolean
 ) {
   ctx.fillStyle = "rgba(0,0,0,0.6)";
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  const pw = 300;
-  const ph = 200;
-  const px = (CANVAS_W - pw) / 2;
-  const py = (CANVAS_H - ph) / 2;
+  const px = SET_PX;
+  const py = SET_PY;
 
   ctx.fillStyle = "#1a0a2e";
-  drawRoundRect(ctx, px, py, pw, ph, 20);
+  drawRoundRect(ctx, px, py, SET_PW, SET_PH, 20);
   ctx.fill();
   ctx.strokeStyle = "#FFD700";
   ctx.lineWidth = 3;
-  drawRoundRect(ctx, px, py, pw, ph, 20);
+  drawRoundRect(ctx, px, py, SET_PW, SET_PH, 20);
   ctx.stroke();
 
   ctx.fillStyle = "#fff";
@@ -1275,26 +1299,45 @@ function drawSettingsPanel(
   // Tilt button
   const isTilt = controlMode === "tilt";
   ctx.fillStyle = isTilt ? "#FFD700" : "rgba(255,255,255,0.2)";
-  drawRoundRect(ctx, px + 20, py + 82, 120, 40, 10);
+  drawRoundRect(ctx, SET_TILT_BTN.x, SET_TILT_BTN.y, SET_TILT_BTN.w, SET_TILT_BTN.h, 10);
   ctx.fill();
   ctx.fillStyle = isTilt ? "#000" : "#fff";
   ctx.font = "bold 14px 'Fredoka One', cursive";
-  ctx.fillText("📱 Tilt", px + 80, py + 108);
+  ctx.fillText("📱 Tilt", SET_TILT_BTN.x + SET_TILT_BTN.w / 2, SET_TILT_BTN.y + 26);
 
   // Tap button
   ctx.fillStyle = !isTilt ? "#FFD700" : "rgba(255,255,255,0.2)";
-  drawRoundRect(ctx, px + 160, py + 82, 120, 40, 10);
+  drawRoundRect(ctx, SET_TAP_BTN.x, SET_TAP_BTN.y, SET_TAP_BTN.w, SET_TAP_BTN.h, 10);
   ctx.fill();
   ctx.fillStyle = !isTilt ? "#000" : "#fff";
-  ctx.fillText("👆 Tap", px + 220, py + 108);
+  ctx.fillText("👆 Tap", SET_TAP_BTN.x + SET_TAP_BTN.w / 2, SET_TAP_BTN.y + 26);
+
+  ctx.font = "16px 'Fredoka One', cursive";
+  ctx.fillStyle = "rgba(255,255,255,0.8)";
+  ctx.fillText("Audio", CANVAS_W / 2, py + 142);
+
+  // Music toggle button
+  ctx.fillStyle = musicOn ? "#FFD700" : "rgba(255,255,255,0.2)";
+  drawRoundRect(ctx, SET_MUSIC_BTN.x, SET_MUSIC_BTN.y, SET_MUSIC_BTN.w, SET_MUSIC_BTN.h, 10);
+  ctx.fill();
+  ctx.fillStyle = musicOn ? "#000" : "#fff";
+  ctx.font = "bold 14px 'Fredoka One', cursive";
+  ctx.fillText(`🎵 Music: ${musicOn ? "ON" : "OFF"}`, SET_MUSIC_BTN.x + SET_MUSIC_BTN.w / 2, SET_MUSIC_BTN.y + 26);
+
+  // Sound effects toggle button
+  ctx.fillStyle = soundOn ? "#FFD700" : "rgba(255,255,255,0.2)";
+  drawRoundRect(ctx, SET_SFX_BTN.x, SET_SFX_BTN.y, SET_SFX_BTN.w, SET_SFX_BTN.h, 10);
+  ctx.fill();
+  ctx.fillStyle = soundOn ? "#000" : "#fff";
+  ctx.fillText(`🔊 Sound FX: ${soundOn ? "ON" : "OFF"}`, SET_SFX_BTN.x + SET_SFX_BTN.w / 2, SET_SFX_BTN.y + 26);
 
   // Close / Done button
   ctx.fillStyle = "#f5a020";
-  drawRoundRect(ctx, px + 80, py + 145, 140, 38, 12);
+  drawRoundRect(ctx, SET_DONE_BTN.x, SET_DONE_BTN.y, SET_DONE_BTN.w, SET_DONE_BTN.h, 12);
   ctx.fill();
   ctx.fillStyle = "#fff";
   ctx.font = "bold 15px 'Fredoka One', cursive";
-  ctx.fillText("Done", CANVAS_W / 2, py + 170);
+  ctx.fillText("Done", CANVAS_W / 2, SET_DONE_BTN.y + 25);
 }
 
 function drawSettingsButton(ctx: CanvasRenderingContext2D) {
@@ -1428,6 +1471,17 @@ const MENU_LB_BTN = { x: CANVAS_W / 2 - 100, y: 648, w: 200, h: 44 };
 
 // Leaderboard screen "Play Again" button
 const LB_PLAY_BTN = { x: CANVAS_W / 2 - 100, y: CANVAS_H - 88, w: 200, h: 50 };
+
+// Settings panel (panel is 300 wide x 340 tall, centered)
+const SET_PW = 300;
+const SET_PH = 340;
+const SET_PX = (CANVAS_W - SET_PW) / 2; // 60
+const SET_PY = (CANVAS_H - SET_PH) / 2; // 210
+const SET_TILT_BTN  = { x: SET_PX + 20,  y: SET_PY + 82,  w: 120, h: 40 };
+const SET_TAP_BTN   = { x: SET_PX + 160, y: SET_PY + 82,  w: 120, h: 40 };
+const SET_MUSIC_BTN = { x: SET_PX + 20,  y: SET_PY + 152, w: 260, h: 40 };
+const SET_SFX_BTN   = { x: SET_PX + 20,  y: SET_PY + 202, w: 260, h: 40 };
+const SET_DONE_BTN  = { x: SET_PX + 80,  y: SET_PY + 262, w: 140, h: 38 };
 
 function drawWinScreen(ctx: CanvasRenderingContext2D, score: number, bestScore: number, winAnim: number, t: number, wonAsFry = false) {
   const alpha = Math.min(1, winAnim * 1.6);
@@ -1757,13 +1811,10 @@ function tickGame(gs: GameState, tiltX: number, tapDir: number, dt: number, onSo
   gs.bgPhase += dt;
   if (gs.jumpFlash > 0) gs.jumpFlash -= dt;
 
-  // Determine horizontal input
-  let inputX = 0;
-  if (gs.controlMode === "tilt") {
-    inputX = tiltX;
-  } else {
-    inputX = tapDir;
-  }
+  // Determine horizontal input. Tilt mode still prefers device orientation, but
+  // taps/arrow-WASD keys (tapDir) always work as a fallback so desktop/no-tilt
+  // devices and quick taps immediately move the player.
+  const inputX = gs.controlMode === "tilt" && tiltX !== 0 ? tiltX : tapDir;
 
   // Apply physics
   player.vx = lerp(player.vx, inputX * PLAYER_SPEED, 0.12);
@@ -2096,6 +2147,7 @@ export default function OpPotatoGame() {
   const playOneShot = useCallback((el: HTMLAudioElement | null) => {
     if (!el) return;
     if (el === soundsRef.current.bgMusic) return; // never reset the loop
+    if (!stateRef.current.soundOn) return;
     el.currentTime = 0;
     el.play().catch(() => {});
   }, []);
@@ -2198,8 +2250,12 @@ export default function OpPotatoGame() {
     const prevPhase = prevPhaseRef.current;
     if (prevPhase !== gs.phase) {
       const s = soundsRef.current;
-      if (gs.phase === "playing" && prevPhase === "menu") {
-        s.bgMusic?.play().catch(() => {});
+      // Every new game (any phase → "playing") restarts the loop from the beginning
+      if (gs.phase === "playing" && prevPhase !== "playing") {
+        if (s.bgMusic) {
+          s.bgMusic.currentTime = 0;
+          if (gs.musicOn) s.bgMusic.play().catch(() => {});
+        }
       }
       if (gs.phase === "dead") {
         s.bgMusic?.pause();
@@ -2323,9 +2379,7 @@ export default function OpPotatoGame() {
 
     // Settings panel
     if (gs.showSettings) {
-      drawSettingsPanel(ctx, gs.controlMode, () => { gs.showSettings = false; }, () => {
-        gs.controlMode = gs.controlMode === "tilt" ? "tap" : "tilt";
-      });
+      drawSettingsPanel(ctx, gs.controlMode, gs.musicOn, gs.soundOn);
     }
 
     rafRef.current = requestAnimationFrame(render);
@@ -2375,15 +2429,30 @@ export default function OpPotatoGame() {
     // Settings panel interactions
     if (gs.showSettings) {
       // Tilt button
-      if (x > CANVAS_W / 2 - 130 && x < CANVAS_W / 2 - 10 && y > CANVAS_H / 2 - 30 && y < CANVAS_H / 2 + 10) {
+      if (x > SET_TILT_BTN.x && x < SET_TILT_BTN.x + SET_TILT_BTN.w && y > SET_TILT_BTN.y && y < SET_TILT_BTN.y + SET_TILT_BTN.h) {
         gs.controlMode = "tilt";
       }
       // Tap button
-      if (x > CANVAS_W / 2 + 10 && x < CANVAS_W / 2 + 130 && y > CANVAS_H / 2 - 30 && y < CANVAS_H / 2 + 10) {
+      if (x > SET_TAP_BTN.x && x < SET_TAP_BTN.x + SET_TAP_BTN.w && y > SET_TAP_BTN.y && y < SET_TAP_BTN.y + SET_TAP_BTN.h) {
         gs.controlMode = "tap";
       }
+      // Music toggle button
+      if (x > SET_MUSIC_BTN.x && x < SET_MUSIC_BTN.x + SET_MUSIC_BTN.w && y > SET_MUSIC_BTN.y && y < SET_MUSIC_BTN.y + SET_MUSIC_BTN.h) {
+        gs.musicOn = !gs.musicOn;
+        saveAudioPref(MUSIC_PREF_KEY, gs.musicOn);
+        const bgMusic = soundsRef.current.bgMusic;
+        if (bgMusic) {
+          if (gs.musicOn && gs.phase === "playing") bgMusic.play().catch(() => {});
+          else bgMusic.pause();
+        }
+      }
+      // Sound effects toggle button
+      if (x > SET_SFX_BTN.x && x < SET_SFX_BTN.x + SET_SFX_BTN.w && y > SET_SFX_BTN.y && y < SET_SFX_BTN.y + SET_SFX_BTN.h) {
+        gs.soundOn = !gs.soundOn;
+        saveAudioPref(SOUND_PREF_KEY, gs.soundOn);
+      }
       // Done button
-      if (x > CANVAS_W / 2 - 70 && x < CANVAS_W / 2 + 70 && y > CANVAS_H / 2 + 25 && y < CANVAS_H / 2 + 63) {
+      if (x > SET_DONE_BTN.x && x < SET_DONE_BTN.x + SET_DONE_BTN.w && y > SET_DONE_BTN.y && y < SET_DONE_BTN.y + SET_DONE_BTN.h) {
         gs.showSettings = false;
       }
       return;
@@ -2471,8 +2540,8 @@ export default function OpPotatoGame() {
       return;
     }
 
-    // Playing: tap direction
-    if (gs.phase === "playing" && gs.controlMode === "tap") {
+    // Playing: tap direction (works as a fallback even in tilt mode)
+    if (gs.phase === "playing") {
       tapDirRef.current = x < CANVAS_W / 2 ? -1 : 1;
     }
   }, [fetchLeaderboard]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2485,15 +2554,20 @@ export default function OpPotatoGame() {
   useEffect(() => {
     const keys = new Set<string>();
     const onKey = (e: KeyboardEvent) => {
+      // Don't hijack typing in the name-submission input (or any other input field)
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+
       if (e.type === "keydown") keys.add(e.key);
       else keys.delete(e.key);
       const left = keys.has("ArrowLeft") || keys.has("a") || keys.has("A");
       const right = keys.has("ArrowRight") || keys.has("d") || keys.has("D");
       tapDirRef.current = left ? -1 : right ? 1 : 0;
 
-      // Space = start/restart
-      if (e.type === "keydown" && (e.key === " " || e.key === "Enter")) {
+      // Any key = start/restart
+      if (e.type === "keydown") {
         const gs = stateRef.current;
+        if (gs.showSettings || showSplash || showHelp || showNameInput) return;
         if (gs.phase === "menu") { gs.phase = "playing"; return; }
         if (gs.phase === "dead" || gs.phase === "won") {
           const best = gs.bestScore;
@@ -2509,7 +2583,7 @@ export default function OpPotatoGame() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKey);
     };
-  }, []);
+  }, [showSplash, showHelp, showNameInput]);
 
   return (
     <div
