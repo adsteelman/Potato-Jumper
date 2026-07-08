@@ -58,6 +58,16 @@ interface Particle {
   size: number;
 }
 
+interface Cloud {
+  id: number;
+  worldY: number; // fixed world Y — scrolls with camera like platforms/hazards
+  x: number; // base horizontal position (before drift)
+  phase: number; // drift sine phase, unique per cloud
+  driftSpeed: number; // drift sine speed, unique per cloud
+  driftAmp: number; // max horizontal drift in px (<=15)
+  scale: number;
+}
+
 interface LeaderboardEntry {
   id: number;
   playerName: string;
@@ -102,8 +112,8 @@ interface GameState {
   hazards: Hazard[];
   particles: Particle[];
   confetti: Confetti[];
+  clouds: Cloud[];
   cameraY: number; // world Y of top of screen
-  cloudScrollY: number; // accumulated scroll only while player ascends
   score: number;
   bestScore: number;
   startY: number;
@@ -174,6 +184,42 @@ function initPlatforms(startY: number): { platforms: Platform[]; nextId: number 
   return { platforms, nextId: id };
 }
 
+const CLOUD_COUNT = 5;
+
+function makeCloud(id: number, worldY: number): Cloud {
+  return {
+    id,
+    worldY,
+    x: 40 + Math.random() * (CANVAS_W - 80),
+    phase: Math.random() * Math.PI * 2,
+    driftSpeed: 0.00022 + Math.random() * 0.00035, // unique speed per cloud
+    driftAmp: 6 + Math.random() * 9, // 6..15px, capped at 15px per side
+    scale: 0.75 + Math.random() * 0.4,
+  };
+}
+
+// Spreads clouds across the initial screen (in world space) so they're visible immediately.
+function initClouds(cameraY: number): Cloud[] {
+  const clouds: Cloud[] = [];
+  for (let i = 0; i < CLOUD_COUNT; i++) {
+    const worldY = cameraY + (i / CLOUD_COUNT) * (CANVAS_H + 160) - 60;
+    clouds.push(makeCloud(i, worldY));
+  }
+  return clouds;
+}
+
+// World-space scroll: clouds sit at a fixed world Y and only wrap when they scroll off the bottom.
+function updateClouds(gs: GameState) {
+  for (const cloud of gs.clouds) {
+    const screenY = cloud.worldY - gs.cameraY;
+    if (screenY > CANVAS_H + 50) {
+      cloud.worldY = gs.cameraY - CANVAS_H - Math.random() * 200;
+      cloud.x = 40 + Math.random() * (CANVAS_W - 80);
+      cloud.phase = Math.random() * Math.PI * 2;
+    }
+  }
+}
+
 function makeInitialState(bestScore: number): GameState {
   const startY = CANVAS_H * 0.7;
   const { platforms, nextId } = initPlatforms(startY);
@@ -201,8 +247,8 @@ function makeInitialState(bestScore: number): GameState {
     hazards: [],
     particles: [],
     confetti: [],
+    clouds: initClouds(cameraY),
     cameraY,
-    cloudScrollY: 0,
     score: 0,
     bestScore,
     startY,
@@ -1008,7 +1054,7 @@ function drawPotato(
   }
 }
 
-function drawBackground(ctx: CanvasRenderingContext2D, cameraY: number, score: number, t: number, sprites: SpriteMap | null = null, cloudScrollY = 0) {
+function drawBackground(ctx: CanvasRenderingContext2D, cameraY: number, score: number, t: number, sprites: SpriteMap | null = null, clouds: Cloud[] = []) {
   // Sky gradient based on score
   const progression = Math.min(score / 15000, 1);
   const skyColors: [string, string][] = [
@@ -1061,20 +1107,15 @@ function drawBackground(ctx: CanvasRenderingContext2D, cameraY: number, score: n
     ctx.globalAlpha = 1;
   }
 
-  // Clouds at low altitude
+  // Clouds at low altitude — positioned in world space, same as platforms/hazards
   if (score < 8000) {
     const cloudAlpha = Math.max(0, 1 - score / 8000);
-    const cloudPositions = [
-      { cx: 80,  cy: 100, phase: 0,   scale: 1.0,  driftSpeed: 0.00035, driftAmp: 9  },
-      { cx: 320, cy: 200, phase: 1.5, scale: 0.85, driftSpeed: 0.00048, driftAmp: 7  },
-      { cx: 150, cy: 500, phase: 3,   scale: 1.1,  driftSpeed: 0.00028, driftAmp: 10 },
-      { cx: 350, cy: 620, phase: 4.5, scale: 0.75, driftSpeed: 0.00055, driftAmp: 8  },
-    ];
     const img = sprites?.cloud;
-    for (const cp of cloudPositions) {
-      const cloudY = ((cp.cy - cloudScrollY + t * 0.02) % (CANVAS_H + 80) + CANVAS_H + 80) % (CANVAS_H + 80) - 40;
-      const cloudX = cp.cx + Math.sin(t * cp.driftSpeed + cp.phase) * cp.driftAmp;
-      const dw = 140 * cp.scale;
+    for (const cloud of clouds) {
+      const screenY = cloud.worldY - cameraY;
+      if (screenY < -100 || screenY > CANVAS_H + 100) continue;
+      const cloudX = cloud.x + Math.sin(t * cloud.driftSpeed + cloud.phase) * cloud.driftAmp;
+      const dw = 140 * cloud.scale;
       const dh = img?.width ? dw / (img.width / img.height) : dw * 0.5;
 
       if (img?.width) {
@@ -1082,21 +1123,21 @@ function drawBackground(ctx: CanvasRenderingContext2D, cameraY: number, score: n
         ctx.save();
         ctx.filter = "blur(5px)";
         ctx.globalAlpha = cloudAlpha * 0.22;
-        ctx.drawImage(img, cloudX - dw / 2 + 4, cloudY - dh / 2 + 7, dw, dh);
+        ctx.drawImage(img, cloudX - dw / 2 + 4, screenY - dh / 2 + 7, dw, dh);
         ctx.filter = "none";
         ctx.globalAlpha = cloudAlpha * 0.88;
-        ctx.drawImage(img, cloudX - dw / 2, cloudY - dh / 2, dw, dh);
+        ctx.drawImage(img, cloudX - dw / 2, screenY - dh / 2, dw, dh);
         ctx.restore();
       } else {
         // Fallback: programmatic cloud
         ctx.globalAlpha = cloudAlpha * 0.6;
         ctx.fillStyle = "#fff";
         ctx.beginPath();
-        ctx.ellipse(cloudX, cloudY, 40 * cp.scale, 18 * cp.scale, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.ellipse(cloudX, screenY, 40 * cloud.scale, 18 * cloud.scale, 0, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath();
-        ctx.ellipse(cloudX + 30 * cp.scale, cloudY + 5 * cp.scale, 28 * cp.scale, 14 * cp.scale, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.ellipse(cloudX + 30 * cloud.scale, screenY + 5 * cloud.scale, 28 * cloud.scale, 14 * cloud.scale, 0, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath();
-        ctx.ellipse(cloudX - 25 * cp.scale, cloudY + 6 * cp.scale, 24 * cp.scale, 13 * cp.scale, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.ellipse(cloudX - 25 * cloud.scale, screenY + 6 * cloud.scale, 24 * cloud.scale, 13 * cloud.scale, 0, 0, Math.PI * 2); ctx.fill();
       }
     }
     ctx.globalAlpha = 1;
@@ -1863,9 +1904,11 @@ function tickGame(gs: GameState, tiltX: number, tapDir: number, dt: number, onSo
   // Camera: only scroll up
   const targetCameraY = player.y - CANVAS_H * (1 - CAMERA_LEAD);
   if (targetCameraY < gs.cameraY) {
-    gs.cloudScrollY += (gs.cameraY - targetCameraY) * 0.6;
     gs.cameraY = targetCameraY;
   }
+  // Clouds live in world space, like platforms/hazards — moving the camera moves
+  // their screen position automatically. This only recycles ones that scroll off.
+  updateClouds(gs);
 
   // Score: based on upward distance
   const newScore = Math.max(0, Math.floor((gs.startY - player.y) / 5));
@@ -2331,7 +2374,7 @@ export default function OpPotatoGame() {
     // ── Draw ──
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
-    drawBackground(ctx, gs.cameraY, gs.score, t, spritesRef.current, gs.cloudScrollY);
+    drawBackground(ctx, gs.cameraY, gs.score, t, spritesRef.current, gs.clouds);
 
     // Draw tap zones in play mode
     if (gs.phase === "playing" && gs.controlMode === "tap") {
