@@ -1065,15 +1065,15 @@ function drawBackground(ctx: CanvasRenderingContext2D, cameraY: number, score: n
   if (score < 8000) {
     const cloudAlpha = Math.max(0, 1 - score / 8000);
     const cloudPositions = [
-      { cx: 80,  cy: 100, phase: 0,   scale: 1.0 },
-      { cx: 320, cy: 200, phase: 1.5, scale: 0.85 },
-      { cx: 150, cy: 500, phase: 3,   scale: 1.1 },
-      { cx: 350, cy: 620, phase: 4.5, scale: 0.75 },
+      { cx: 80,  cy: 100, phase: 0,   scale: 1.0,  driftSpeed: 0.00035, driftAmp: 9  },
+      { cx: 320, cy: 200, phase: 1.5, scale: 0.85, driftSpeed: 0.00048, driftAmp: 7  },
+      { cx: 150, cy: 500, phase: 3,   scale: 1.1,  driftSpeed: 0.00028, driftAmp: 10 },
+      { cx: 350, cy: 620, phase: 4.5, scale: 0.75, driftSpeed: 0.00055, driftAmp: 8  },
     ];
     const img = sprites?.cloud;
     for (const cp of cloudPositions) {
       const cloudY = ((cp.cy - cloudScrollY + t * 0.02) % (CANVAS_H + 80) + CANVAS_H + 80) % (CANVAS_H + 80) - 40;
-      const cloudX = cp.cx + Math.sin(t * 0.0005 + cp.phase) * 8;
+      const cloudX = cp.cx + Math.sin(t * cp.driftSpeed + cp.phase) * cp.driftAmp;
       const dw = 140 * cp.scale;
       const dh = img?.width ? dw / (img.width / img.height) : dw * 0.5;
 
@@ -1863,7 +1863,7 @@ function tickGame(gs: GameState, tiltX: number, tapDir: number, dt: number, onSo
   // Camera: only scroll up
   const targetCameraY = player.y - CANVAS_H * (1 - CAMERA_LEAD);
   if (targetCameraY < gs.cameraY) {
-    gs.cloudScrollY += (gs.cameraY - targetCameraY) * 0.15;
+    gs.cloudScrollY += (gs.cameraY - targetCameraY) * 0.6;
     gs.cameraY = targetCameraY;
   }
 
