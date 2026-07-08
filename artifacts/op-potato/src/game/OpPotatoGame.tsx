@@ -16,6 +16,14 @@ type PlatformType = "board" | "sack" | "shelf" | "bakingsheet" | "spring" | "hea
 type HazardType = "grater" | "peeler" | "pot";
 type PlayerState = "normal" | "fry" | "dead";
 type GamePhase = "menu" | "playing" | "dead" | "winning" | "won" | "leaderboard";
+type SoundEvent =
+  | "powerup"
+  | "potato_board" | "fry_board"
+  | "potato_sack" | "fry_sack"
+  | "potato_sheet" | "fry_sheet"
+  | "potato_counter" | "fry_counter"
+  | "heal"
+  | "hazard_grate" | "hazard_peel" | "hazard_sizzle";
 
 interface Platform {
   id: number;
@@ -1804,7 +1812,7 @@ function spawnParticles(gs: GameState, x: number, y: number, color: string, coun
   }
 }
 
-function tickGame(gs: GameState, tiltX: number, tapDir: number, dt: number, onSound?: (event: "jump" | "hazard" | "powerup") => void): boolean {
+function tickGame(gs: GameState, tiltX: number, tapDir: number, dt: number, onSound?: (event: SoundEvent) => void): boolean {
   const { player } = gs;
   if (gs.phase !== "playing" && gs.phase !== "winning") return false;
 
@@ -1922,7 +1930,13 @@ function tickGame(gs: GameState, tiltX: number, tapDir: number, dt: number, onSo
         player.stretchY = 0.65; // squish
         player.jumpCount++;
         gs.jumpFlash = 120;
-        onSound?.("jump");
+
+        const isFry = player.state === "fry";
+        if (plat.type === "board") onSound?.(isFry ? "fry_board" : "potato_board");
+        else if (plat.type === "sack") onSound?.(isFry ? "fry_sack" : "potato_sack");
+        else if (plat.type === "bakingsheet") onSound?.(isFry ? "fry_sheet" : "potato_sheet");
+        else if (plat.type === "shelf") onSound?.(isFry ? "fry_counter" : "potato_counter");
+        else if (plat.type === "heal") onSound?.("heal");
 
         if (plat.type === "spring") {
           plat.springAnim = 1;
@@ -1972,16 +1986,20 @@ function tickGame(gs: GameState, tiltX: number, tapDir: number, dt: number, onSo
         playerBottom > hz.y &&
         playerTop < hz.y + hz.h
       ) {
+        const hazardSound: SoundEvent =
+          hz.type === "grater" ? "hazard_grate" :
+          hz.type === "peeler" ? "hazard_peel" :
+          "hazard_sizzle";
         if (player.state === "normal") {
           player.state = "fry";
           gs.formStartScore = gs.score;
           player.prevBuffLevel = 0;
           player.invincTimer = 2500;
-          onSound?.("hazard");
+          onSound?.(hazardSound);
           spawnParticles(gs, player.x, player.y, "#f5c842", 14, 5);
         } else if (player.state === "fry") {
           player.state = "dead";
-          onSound?.("hazard");
+          onSound?.(hazardSound);
           spawnParticles(gs, player.x, player.y, "#fff", 20, 6);
           spawnParticles(gs, player.x, player.y, "#c8a050", 14, 4);
           gs.phase = "dead";
@@ -2057,12 +2075,30 @@ export default function OpPotatoGame() {
   const pendingScoreRef = useRef({ score: 0, stageReached: 0 });
   const spritesRef = useRef<SpriteMap | null>(null);
   const soundsRef = useRef<{
-    jump: HTMLAudioElement | null;
+    potatoBoard: HTMLAudioElement | null;
+    fryBoard: HTMLAudioElement | null;
+    potatoSack: HTMLAudioElement | null;
+    frySack: HTMLAudioElement | null;
+    potatoSheet: HTMLAudioElement | null;
+    frySheet: HTMLAudioElement | null;
+    potatoCounter: HTMLAudioElement | null;
+    fryCounter: HTMLAudioElement | null;
+    heal: HTMLAudioElement | null;
+    hazardGrate: HTMLAudioElement | null;
+    hazardPeel: HTMLAudioElement | null;
     hazardSizzle: HTMLAudioElement | null;
     mashed: HTMLAudioElement | null;
     powerUp: HTMLAudioElement | null;
     bgMusic: HTMLAudioElement | null;
-  }>({ jump: null, hazardSizzle: null, mashed: null, powerUp: null, bgMusic: null });
+  }>({
+    potatoBoard: null, fryBoard: null,
+    potatoSack: null, frySack: null,
+    potatoSheet: null, frySheet: null,
+    potatoCounter: null, fryCounter: null,
+    heal: null,
+    hazardGrate: null, hazardPeel: null, hazardSizzle: null,
+    mashed: null, powerUp: null, bgMusic: null,
+  });
   const prevPhaseRef = useRef<GamePhase>("menu");
 
   // Load sprite images once on mount
@@ -2135,11 +2171,21 @@ export default function OpPotatoGame() {
       return a;
     };
     soundsRef.current = {
-      jump:         load("/sounds/Jump.wav",          false, 0.50),
-      hazardSizzle: load("/sounds/Hazard_Sizzle.mp3", false, 0.70),
-      mashed:       load("/sounds/Mashed.wav",        false, 0.80),
-      powerUp:      load("/sounds/PowerUP.ogg",       false, 0.75),
-      bgMusic:      load("/sounds/loop.ogg",          true,  0.35),
+      potatoBoard:   load("/sounds/Impact_potato_board.ogg",   false, 0.50),
+      fryBoard:      load("/sounds/Impact_fry_board.ogg",      false, 0.50),
+      potatoSack:    load("/sounds/Impact_potato_sack.ogg",    false, 0.50),
+      frySack:       load("/sounds/Impact_fry_sack.ogg",       false, 0.50),
+      potatoSheet:   load("/sounds/Impact_potato_sheet.ogg",   false, 0.50),
+      frySheet:      load("/sounds/Impact_fry_sheet.ogg",      false, 0.50),
+      potatoCounter: load("/sounds/Impact_potato_counter.ogg", false, 0.50),
+      fryCounter:    load("/sounds/Impact_fry_counter.ogg",    false, 0.50),
+      heal:          load("/sounds/Impact_heal.ogg",           false, 0.60),
+      hazardGrate:   load("/sounds/Hazard_Grate.ogg",          false, 0.70),
+      hazardPeel:    load("/sounds/Hazard_Peeler.ogg",         false, 0.70),
+      hazardSizzle:  load("/sounds/Hazard_Sizzle.mp3",         false, 0.70),
+      mashed:        load("/sounds/Mashed.wav",                false, 0.80),
+      powerUp:       load("/sounds/PowerUP.ogg",                false, 0.75),
+      bgMusic:       load("/sounds/loop.ogg",                   true,  0.35),
     };
     return () => { soundsRef.current.bgMusic?.pause(); };
   }, []);
@@ -2234,11 +2280,21 @@ export default function OpPotatoGame() {
     }
 
     // Sound callback forwarded from tickGame events
-    const onSound = (event: "jump" | "hazard" | "powerup") => {
+    const onSound = (event: SoundEvent) => {
       const s = soundsRef.current;
-      if (event === "jump")    playOneShot(s.jump);
-      if (event === "hazard")  playOneShot(s.hazardSizzle);
-      if (event === "powerup") playOneShot(s.powerUp);
+      if (event === "powerup")             playOneShot(s.powerUp);
+      else if (event === "potato_board")   playOneShot(s.potatoBoard);
+      else if (event === "fry_board")      playOneShot(s.fryBoard);
+      else if (event === "potato_sack")    playOneShot(s.potatoSack);
+      else if (event === "fry_sack")       playOneShot(s.frySack);
+      else if (event === "potato_sheet")   playOneShot(s.potatoSheet);
+      else if (event === "fry_sheet")      playOneShot(s.frySheet);
+      else if (event === "potato_counter") playOneShot(s.potatoCounter);
+      else if (event === "fry_counter")    playOneShot(s.fryCounter);
+      else if (event === "heal")           playOneShot(s.heal);
+      else if (event === "hazard_grate")   playOneShot(s.hazardGrate);
+      else if (event === "hazard_peel")    playOneShot(s.hazardPeel);
+      else if (event === "hazard_sizzle")  playOneShot(s.hazardSizzle);
     };
 
     // Tick game (slowed during winning)
