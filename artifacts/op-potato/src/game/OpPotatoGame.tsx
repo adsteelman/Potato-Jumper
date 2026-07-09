@@ -4,7 +4,7 @@ import { HelpScreen } from "./HelpScreen";
 
 const CANVAS_W = 420;
 const CANVAS_H = 760;
-const GRAVITY = 0.4;
+const GRAVITY = 0.55;
 const JUMP_VY = -11.2;
 const PLAYER_W = 65;
 const PLAYER_H = 70;
@@ -1785,7 +1785,7 @@ function spawnPlatformsAbove(gs: GameState) {
     // Occasionally override with heal platform when player is in fry state
     const isEdgePosition = x < 80 || (x + w) > CANVAS_W - 80;
     const finalType: PlatformType =
-      (gs.player.state === "fry" && isEdgePosition && Math.random() < 0.05) ? "heal" : type;
+      (gs.player.state === "fry" && isEdgePosition && Math.random() < 0.18) ? "heal" : type;
     gs.platforms.push({ id: nextId++, x, y, w, type: finalType, bounced: false, springAnim: 0 });
 
     // Possibly spawn a hazard near this platform
@@ -1866,7 +1866,7 @@ function tickGame(gs: GameState, tiltX: number, tapDir: number, dt: number, onSo
   const inputX = gs.controlMode === "tilt" && tiltX !== 0 ? tiltX : tapDir;
 
   // Apply physics
-  player.vx = lerp(player.vx, inputX * PLAYER_SPEED, 0.12);
+  player.vx = lerp(player.vx, inputX * PLAYER_SPEED, 0.28);
   // Floaty apex: reduce gravity when near the peak of the arc
   const apexFactor = Math.min(1, Math.abs(player.vy) / 4);
   player.vy += GRAVITY * (0.25 + 0.75 * apexFactor);
@@ -2230,7 +2230,21 @@ export default function OpPotatoGame() {
       powerUp:       load("/sounds/PowerUP.ogg",                false, 0.75),
       bgMusic:       load("/sounds/loop.ogg",                   true,  0.35),
     };
-    return () => { soundsRef.current.bgMusic?.pause(); };
+    // Browsers occasionally interrupt background audio (tab backgrounding, phone
+    // calls, etc.) by pausing the element outside of our own pause() calls. Resume
+    // it automatically unless the pause matches a state we intentionally paused for.
+    const bgMusic = soundsRef.current.bgMusic;
+    const onMusicPause = () => {
+      const gs = stateRef.current;
+      if (gs.phase === "playing" && gs.musicOn) {
+        bgMusic?.play().catch(() => {});
+      }
+    };
+    bgMusic?.addEventListener("pause", onMusicPause);
+    return () => {
+      bgMusic?.removeEventListener("pause", onMusicPause);
+      bgMusic?.pause();
+    };
   }, []);
 
   const playOneShot = useCallback((el: HTMLAudioElement | null) => {
