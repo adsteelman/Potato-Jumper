@@ -5,7 +5,7 @@ import { HelpScreen } from "./HelpScreen";
 const CANVAS_W = 420;
 const CANVAS_H = 760;
 const GRAVITY = 0.55;
-const JUMP_VY = -11.2;
+const JUMP_VY = -13.5;
 const PLAYER_W = 65;
 const PLAYER_H = 70;
 const PLAYER_SPEED = 4.5;
