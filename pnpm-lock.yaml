@@ -158,11 +158,17 @@ importers:
   .:
     devDependencies:
       '@esbuild/darwin-arm64':
-        specifier: ^0.28.1
-        version: 0.28.1
+        specifier: 0.27.3
+        version: 0.27.3
       '@rollup/rollup-darwin-arm64':
         specifier: ^4.62.2
         version: 4.62.2
+      esbuild:
+        specifier: 0.27.3
+        version: 0.27.3
+      lightningcss-darwin-arm64:
+        specifier: 1.32.0
+        version: 1.32.0
       prettier:
         specifier: ^3.8.3
         version: 3.8.3
@@ -549,6 +555,9 @@ importers:
       embla-carousel-react:
         specifier: ^8.6.0
         version: 8.6.0(react@19.1.0)
+      esbuild:
+        specifier: 0.27.3
+        version: 0.27.3
       framer-motion:
         specifier: 'catalog:'
         version: 12.38.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -772,8 +781,8 @@ packages:
   '@drizzle-team/brocli@0.10.2':
     resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
 
-  '@esbuild/darwin-arm64@0.28.1':
-    resolution: {integrity: sha512-TZbWkQY7kvTAXbXUT7uVACR5cMHsDiSz9z7ZKAX/RTq/WJEk3QyRr0wZpNhBDX+/0CtdqUIJlOiodQcta6tY3Q==}
+  '@esbuild/darwin-arm64@0.27.3':
+    resolution: {integrity: sha512-Re491k7ByTVRy0t3EKWajdLIr0gz2kKKfzafkth4Q8A5n1xTHrkqZgLLjFEHVD+AXdUGgQMq+Godfq45mGpCKg==}
     engines: {node: '>=18'}
     cpu: [arm64]
     os: [darwin]
@@ -2573,6 +2582,12 @@ packages:
     resolution: {integrity: sha512-KZ9W9nWDT7rF7Dazg8xyLHGLrmpgq2nVNFUckhqdW3szVP6YhCpp/RAnpmVExA9JvrMynjwSLVrEj3AepHR6ew==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
+  lightningcss-darwin-arm64@1.32.0:
+    resolution: {integrity: sha512-RzeG9Ju5bag2Bv1/lwlVJvBE3q6TtXskdZLLCyfg5pt+HLz9BqlICO7LZM7VHNTTn/5PRhHFBSjk5lc4cmscPQ==}
+    engines: {node: '>= 12.0.0'}
+    cpu: [arm64]
+    os: [darwin]
+
   lightningcss-linux-x64-gnu@1.32.0:
     resolution: {integrity: sha512-V7Qr52IhZmdKPVr+Vtw8o+WLsQJYCTd8loIfpDaMRWGUZfBOYEJeyJIkqGIDMZPwPx24pUMfwSxxI8phr/MbOA==}
     engines: {node: '>= 12.0.0'}
@@ -3617,7 +3632,7 @@ snapshots:
 
   '@drizzle-team/brocli@0.10.2': {}
 
-  '@esbuild/darwin-arm64@0.28.1': {}
+  '@esbuild/darwin-arm64@0.27.3': {}
 
   '@esbuild/linux-x64@0.27.3':
     optional: true
@@ -5445,6 +5460,8 @@ snapshots:
   kleur@4.1.5: {}
 
   leven@4.1.0: {}
+
+  lightningcss-darwin-arm64@1.32.0: {}
 
   lightningcss-linux-x64-gnu@1.32.0:
     optional: true

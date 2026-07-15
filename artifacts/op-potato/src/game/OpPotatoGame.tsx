@@ -2298,36 +2298,23 @@ export default function OpPotatoGame() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ratio = getPixelRatio();
-    
-    // Get safe area insets from computed styles
-    const styles = getComputedStyle(document.documentElement);
-    const parsePixels = (value: string) => {
-      const match = value.match(/(\d+(?:\.\d+)?)/);
-      return match ? parseFloat(match[1]) : 0;
-    };
-    const safeTop = parsePixels(styles.getPropertyValue('--safe-area-inset-top'));
-    const safeLeft = parsePixels(styles.getPropertyValue('--safe-area-inset-left'));
-    const safeRight = parsePixels(styles.getPropertyValue('--safe-area-inset-right'));
-    
-    const cw = window.innerWidth - safeLeft - safeRight;
-    const ch = window.innerHeight - safeTop - AD_BANNER_H; // reserve top for safe area and bottom for ad banner
-    // Portrait (mobile): cover — fill full width, clip top/bottom excess
-    // Landscape (desktop/preview): contain — show the full game
-    const isPortrait = ch >= cw;
-    const scale = isPortrait
-      ? Math.max(cw / CANVAS_W, ch / CANVAS_H)
-      : Math.min(cw / CANVAS_W, ch / CANVAS_H);
-    const dispW = Math.round(CANVAS_W * scale);
-    const dispH = Math.round(CANVAS_H * scale);
+
+    const cw = window.innerWidth;
+    const ch = window.innerHeight;
+    const scale = Math.max(cw / CANVAS_W, ch / CANVAS_H);
+
     canvas.style.position = "absolute";
-    canvas.style.left = `${Math.round(safeLeft + (cw - dispW) / 2)}px`;
-    canvas.style.top = `${Math.round(safeTop + (ch - dispH) / 2)}px`;
-    canvas.style.width = dispW + "px";
-    canvas.style.height = dispH + "px";
-    canvas.width = Math.round(CANVAS_W * ratio);
-    canvas.height = Math.round(CANVAS_H * ratio);
+    canvas.style.left = "0px";
+    canvas.style.top = "0px";
+    canvas.style.width = `${cw}px`;
+    canvas.style.height = `${ch}px`;
+    canvas.width = Math.round(cw * ratio);
+    canvas.height = Math.round(ch * ratio);
+
     const ctx = canvas.getContext("2d");
-    if (ctx) ctx.scale(ratio, ratio);
+    if (ctx) {
+      ctx.setTransform(ratio * scale, 0, 0, ratio * scale, 0, 0);
+    }
   }, []);
 
   const render = useCallback((t: number) => {
@@ -2712,14 +2699,11 @@ export default function OpPotatoGame() {
   return (
     <div
       style={{
-        width: "100%",
-        height: "100%",
-        position: "relative",
+        position: "fixed",
+        inset: 0,
         overflow: "hidden",
         background: "#000",
-        paddingTop: "env(safe-area-inset-top)",
-        paddingLeft: "env(safe-area-inset-left)",
-        paddingRight: "env(safe-area-inset-right)",
+        padding: 0,
       }}
     >
       <canvas
