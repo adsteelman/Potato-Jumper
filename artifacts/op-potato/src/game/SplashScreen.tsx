@@ -86,7 +86,7 @@ export function SplashScreen({ onStart, onHelp, adBannerH }: Props) {
         {/* Potato Stage 5 — bobbing */}
         <div className="op-bob" style={{ marginBottom: 28 }}>
           <img
-            src="/sprites/potato-5.png"
+            src="/sprites/Potato_Stage5.png"
             draggable={false}
             style={{
               width: 180,
