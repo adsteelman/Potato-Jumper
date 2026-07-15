@@ -1121,8 +1121,8 @@ function drawBackground(ctx: CanvasRenderingContext2D, cameraY: number, score: n
       if (img?.width) {
         // Blurred shadow offset downward for depth
         ctx.save();
-        ctx.filter = "blur(5px)";
-        ctx.globalAlpha = cloudAlpha * 0.22;
+        ctx.filter = "blur(2px)";
+        ctx.globalAlpha = cloudAlpha * 0.12;
         ctx.drawImage(img, cloudX - dw / 2 + 4, screenY - dh / 2 + 7, dw, dh);
         ctx.filter = "none";
         ctx.globalAlpha = cloudAlpha * 0.88;
@@ -2298,8 +2298,19 @@ export default function OpPotatoGame() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ratio = getPixelRatio();
-    const cw = window.innerWidth;
-    const ch = window.innerHeight - AD_BANNER_H; // reserve bottom strip for ad banner
+    
+    // Get safe area insets from computed styles
+    const styles = getComputedStyle(document.documentElement);
+    const parsePixels = (value: string) => {
+      const match = value.match(/(\d+(?:\.\d+)?)/);
+      return match ? parseFloat(match[1]) : 0;
+    };
+    const safeTop = parsePixels(styles.getPropertyValue('--safe-area-inset-top'));
+    const safeLeft = parsePixels(styles.getPropertyValue('--safe-area-inset-left'));
+    const safeRight = parsePixels(styles.getPropertyValue('--safe-area-inset-right'));
+    
+    const cw = window.innerWidth - safeLeft - safeRight;
+    const ch = window.innerHeight - safeTop - AD_BANNER_H; // reserve top for safe area and bottom for ad banner
     // Portrait (mobile): cover — fill full width, clip top/bottom excess
     // Landscape (desktop/preview): contain — show the full game
     const isPortrait = ch >= cw;
@@ -2309,8 +2320,8 @@ export default function OpPotatoGame() {
     const dispW = Math.round(CANVAS_W * scale);
     const dispH = Math.round(CANVAS_H * scale);
     canvas.style.position = "absolute";
-    canvas.style.left = `${Math.round((cw - dispW) / 2)}px`;
-    canvas.style.top = `${Math.round((ch - dispH) / 2)}px`;
+    canvas.style.left = `${Math.round(safeLeft + (cw - dispW) / 2)}px`;
+    canvas.style.top = `${Math.round(safeTop + (ch - dispH) / 2)}px`;
     canvas.style.width = dispW + "px";
     canvas.style.height = dispH + "px";
     canvas.width = Math.round(CANVAS_W * ratio);
@@ -2706,6 +2717,9 @@ export default function OpPotatoGame() {
         position: "relative",
         overflow: "hidden",
         background: "#000",
+        paddingTop: "env(safe-area-inset-top)",
+        paddingLeft: "env(safe-area-inset-left)",
+        paddingRight: "env(safe-area-inset-right)",
       }}
     >
       <canvas
