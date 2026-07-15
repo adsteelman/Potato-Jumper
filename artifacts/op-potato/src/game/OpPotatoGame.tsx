@@ -1122,7 +1122,7 @@ function drawBackground(ctx: CanvasRenderingContext2D, cameraY: number, score: n
         // Blurred shadow offset downward for depth
         ctx.save();
         ctx.filter = "blur(2px)";
-        ctx.globalAlpha = cloudAlpha * 0.12;
+        ctx.globalAlpha = cloudAlpha * 0.10;
         ctx.drawImage(img, cloudX - dw / 2 + 4, screenY - dh / 2 + 7, dw, dh);
         ctx.filter = "none";
         ctx.globalAlpha = cloudAlpha * 0.88;
@@ -1157,16 +1157,16 @@ function drawParticle(ctx: CanvasRenderingContext2D, p: Particle) {
 function drawHUD(ctx: CanvasRenderingContext2D, score: number, buffLevel: number, playerState: PlayerState, bestScore: number) {
   // Score panel
   ctx.fillStyle = "rgba(0,0,0,0.4)";
-  drawRoundRect(ctx, 10, 10, 140, 54, 12);
+  drawRoundRect(ctx, 10, 60, 140, 54, 12);
   ctx.fill();
 
   ctx.fillStyle = "#fff";
   ctx.font = "bold 22px 'Fredoka One', cursive";
   ctx.textAlign = "left";
-  ctx.fillText(score.toLocaleString(), 20, 35);
+  ctx.fillText(score.toLocaleString(), 20, 85);
   ctx.font = "12px 'Fredoka One', cursive";
   ctx.fillStyle = "rgba(255,255,255,0.7)";
-  ctx.fillText(`BEST: ${bestScore.toLocaleString()}`, 20, 55);
+  ctx.fillText(`BEST: ${bestScore.toLocaleString()}`, 20, 105);
 
   // Buff level display
   const potatoNames = ["Raw", "Fresh", "Cookin'", "Buff", "OP POTATO!"];
@@ -1178,13 +1178,13 @@ function drawHUD(ctx: CanvasRenderingContext2D, score: number, buffLevel: number
 
   const bw = 150;
   ctx.fillStyle = "rgba(0,0,0,0.4)";
-  drawRoundRect(ctx, CANVAS_W - bw - 10, 10, bw, 54, 12);
+  drawRoundRect(ctx, CANVAS_W - bw - 10, 60, bw, 54, 12);
   ctx.fill();
 
   ctx.fillStyle = bcolor;
   ctx.font = "bold 14px 'Fredoka One', cursive";
   ctx.textAlign = "right";
-  ctx.fillText(bname, CANVAS_W - 18, 30);
+  ctx.fillText(bname, CANVAS_W - 18, 80);
 
   // Buff progress pips
   const pipW = 22;
@@ -1192,11 +1192,11 @@ function drawHUD(ctx: CanvasRenderingContext2D, score: number, buffLevel: number
   for (let i = 0; i < 5; i++) {
     const px = pipStartX + i * (pipW + 4);
     ctx.fillStyle = i <= buffLevel ? buffColors[i] : "rgba(255,255,255,0.15)";
-    drawRoundRect(ctx, px, 40, pipW, 16, 5);
+    drawRoundRect(ctx, px, 90, pipW, 16, 5);
     ctx.fill();
     if (i <= buffLevel) {
       ctx.fillStyle = "rgba(255,255,255,0.3)";
-      drawRoundRect(ctx, px, 40, pipW, 5, 3);
+      drawRoundRect(ctx, px, 90, pipW, 5, 3);
       ctx.fill();
     }
   }
@@ -1204,12 +1204,12 @@ function drawHUD(ctx: CanvasRenderingContext2D, score: number, buffLevel: number
   // Fry warning indicator
   if (playerState === "fry") {
     ctx.fillStyle = "rgba(255,100,0,0.85)";
-    drawRoundRect(ctx, CANVAS_W / 2 - 70, 10, 140, 36, 10);
+    drawRoundRect(ctx, CANVAS_W / 2 - 70, 60, 140, 36, 10);
     ctx.fill();
     ctx.fillStyle = "#fff";
     ctx.font = "bold 14px 'Fredoka One', cursive";
     ctx.textAlign = "center";
-    ctx.fillText("🍟 FRENCH FRIED!", CANVAS_W / 2, 33);
+    ctx.fillText("🍟 FRENCH FRIED!", CANVAS_W / 2, 83);
   }
 }
 
@@ -2302,6 +2302,10 @@ export default function OpPotatoGame() {
     const cw = window.innerWidth;
     const ch = window.innerHeight;
     const scale = Math.max(cw / CANVAS_W, ch / CANVAS_H);
+    const drawW = CANVAS_W * scale;
+    const drawH = CANVAS_H * scale;
+    const offsetX = (cw - drawW) / 2;
+    const offsetY = (ch - drawH) / 2;
 
     canvas.style.position = "absolute";
     canvas.style.left = "0px";
@@ -2313,7 +2317,7 @@ export default function OpPotatoGame() {
 
     const ctx = canvas.getContext("2d");
     if (ctx) {
-      ctx.setTransform(ratio * scale, 0, 0, ratio * scale, 0, 0);
+      ctx.setTransform(ratio * scale, 0, 0, ratio * scale, offsetX * ratio, offsetY * ratio);
     }
   }, []);
 

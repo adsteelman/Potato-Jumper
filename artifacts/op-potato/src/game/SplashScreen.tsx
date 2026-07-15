@@ -72,7 +72,7 @@ export function SplashScreen({ onStart, onHelp, adBannerH }: Props) {
 
         {/* Title graphic */}
         <img
-          src="/sprites/title.png"
+          src="/sprites/TitleGraphic.png"
           draggable={false}
           style={{
             width: "92%",
