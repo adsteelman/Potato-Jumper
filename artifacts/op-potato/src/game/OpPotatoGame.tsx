@@ -2293,6 +2293,20 @@ export default function OpPotatoGame() {
     return 1;
   };
 
+  const getSafeAreaTop = () => {
+    if (typeof document === "undefined") return 0;
+    const probe = document.createElement("div");
+    probe.style.position = "fixed";
+    probe.style.top = "0px";
+    probe.style.height = "env(safe-area-inset-top)";
+    probe.style.visibility = "hidden";
+    probe.style.pointerEvents = "none";
+    document.body.appendChild(probe);
+    const inset = parseFloat(getComputedStyle(probe).height) || 0;
+    document.body.removeChild(probe);
+    return inset;
+  };
+
   const AD_BANNER_H = adsRemoved ? 0 : 60;
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -2301,19 +2315,21 @@ export default function OpPotatoGame() {
 
     const cw = window.innerWidth;
     const ch = window.innerHeight;
-    const scale = Math.max(cw / CANVAS_W, ch / CANVAS_H);
+    const safeTop = getSafeAreaTop();
+    const availH = ch - safeTop;
+    const scale = Math.max(cw / CANVAS_W, availH / CANVAS_H);
     const drawW = CANVAS_W * scale;
     const drawH = CANVAS_H * scale;
     const offsetX = (cw - drawW) / 2;
-    const offsetY = (ch - drawH) / 2;
+    const offsetY = (availH - drawH) / 2;
 
     canvas.style.position = "absolute";
     canvas.style.left = "0px";
-    canvas.style.top = "0px";
+    canvas.style.top = `${safeTop}px`;
     canvas.style.width = `${cw}px`;
-    canvas.style.height = `${ch}px`;
+    canvas.style.height = `${availH}px`;
     canvas.width = Math.round(cw * ratio);
-    canvas.height = Math.round(ch * ratio);
+    canvas.height = Math.round(availH * ratio);
 
     const ctx = canvas.getContext("2d");
     if (ctx) {
