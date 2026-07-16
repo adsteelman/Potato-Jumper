@@ -2405,6 +2405,10 @@ export default function OpPotatoGame() {
 
     // ── Draw ──
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.clip();
 
     drawBackground(ctx, gs.cameraY, gs.score, t, spritesRef.current, gs.clouds);
 
@@ -2512,6 +2516,8 @@ export default function OpPotatoGame() {
     if (gs.showSettings) {
       drawSettingsPanel(ctx, gs.controlMode, gs.musicOn, gs.soundOn);
     }
+    
+    ctx.restore();
 
     rafRef.current = requestAnimationFrame(render);
   }, []);
