@@ -2317,7 +2317,7 @@ export default function OpPotatoGame() {
     const ch = window.innerHeight;
     const safeTop = getSafeAreaTop();
     const availH = ch - safeTop;
-    const scale = Math.max(cw / CANVAS_W, availH / CANVAS_H);
+    const scale = Math.min(cw / CANVAS_W, availH / CANVAS_H);
     const drawW = CANVAS_W * scale;
     const drawH = CANVAS_H * scale;
     const offsetX = (cw - drawW) / 2;
