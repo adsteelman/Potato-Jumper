@@ -1252,7 +1252,10 @@ function drawMenu(ctx: CanvasRenderingContext2D, bestScore: number, t: number, s
   ctx.stroke();
   ctx.fillStyle = "#000";
   ctx.font = "bold 15px 'Fredoka One', cursive";
-  ctx.fillText("Leaderboard", CANVAS_W / 2, MENU_LB_BTN.y + 28);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("Leaderboard", MENU_LB_BTN.x + MENU_LB_BTN.w / 2, MENU_LB_BTN.y + MENU_LB_BTN.h / 2);
+  ctx.textBaseline = "alphabetic";
 }
 
 function drawDeadScreen(ctx: CanvasRenderingContext2D, score: number, bestScore: number, t: number, sprites: SpriteMap | null = null) {
