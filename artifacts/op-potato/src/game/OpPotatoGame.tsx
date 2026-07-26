@@ -2103,7 +2103,7 @@ export default function OpPotatoGame() {
   const adsRemoved = true;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const canvasScaleRef = useRef({ x: 1, y: 1 });
+  const canvasLayoutRef = useRef({ scale: 1, offsetX: 0, offsetY: 0 });
   const safeTopRef = useRef(0);
   const stateRef = useRef<GameState>(makeInitialState(0));
   const rafRef = useRef<number>(0);
@@ -2323,10 +2323,11 @@ export default function OpPotatoGame() {
     const cw = window.innerWidth;
     const ch = window.innerHeight;
     const safeTop = getSafeAreaTop();
-    const scaleX = cw / CANVAS_W;
-    const scaleY = ch / CANVAS_H;
-    canvasScaleRef.current = { x: scaleX, y: scaleY };
-    safeTopRef.current = safeTop / scaleY;
+    const scale = Math.max(cw / CANVAS_W, ch / CANVAS_H);
+    const offsetX = (cw - CANVAS_W * scale) / 2;
+    const offsetY = (ch - CANVAS_H * scale) / 2;
+    canvasLayoutRef.current = { scale, offsetX, offsetY };
+    safeTopRef.current = safeTop / scale;
 
     canvas.style.position = "absolute";
     canvas.style.left = "0px";
@@ -2338,7 +2339,7 @@ export default function OpPotatoGame() {
 
     const ctx = canvas.getContext("2d");
     if (ctx) {
-      ctx.setTransform(ratio * scaleX, 0, 0, ratio * scaleY, 0, 0);
+      ctx.setTransform(ratio * scale, 0, 0, ratio * scale, offsetX * ratio, offsetY * ratio);
     }
   }, []);
 
@@ -2556,10 +2557,10 @@ export default function OpPotatoGame() {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const { x: scaleX, y: scaleY } = canvasScaleRef.current;
+    const { scale, offsetX, offsetY } = canvasLayoutRef.current;
     return {
-      x: (clientX - rect.left) / scaleX,
-      y: (clientY - rect.top) / scaleY,
+      x: (clientX - rect.left - offsetX) / scale,
+      y: (clientY - rect.top - offsetY) / scale,
     };
   };
 
