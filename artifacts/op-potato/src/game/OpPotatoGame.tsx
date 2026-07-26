@@ -1119,12 +1119,23 @@ function drawBackground(ctx: CanvasRenderingContext2D, cameraY: number, score: n
       const dh = img?.width ? dw / (img.width / img.height) : dw * 0.5;
 
       if (img?.width) {
-        // Blurred shadow offset downward for depth
+        // Soft elliptical shadow underneath the cloud for depth
         ctx.save();
-        ctx.filter = "blur(2px)";
-        ctx.globalAlpha = cloudAlpha * 0.10;
-        ctx.drawImage(img, cloudX - dw / 2 + 4, screenY - dh / 2 + 7, dw, dh);
-        ctx.filter = "none";
+        const shadowRadiusX = dw * 0.38;
+        const shadowRadiusY = dh * 0.18;
+        ctx.translate(cloudX + 4, screenY + dh * 0.34);
+        ctx.scale(1, shadowRadiusY / shadowRadiusX);
+        const shadow = ctx.createRadialGradient(0, 0, 0, 0, 0, shadowRadiusX);
+        shadow.addColorStop(0, "rgba(25,60,85,0.12)");
+        shadow.addColorStop(1, "rgba(25,60,85,0)");
+        ctx.globalAlpha = cloudAlpha;
+        ctx.fillStyle = shadow;
+        ctx.beginPath();
+        ctx.arc(0, 0, shadowRadiusX, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
         ctx.globalAlpha = cloudAlpha * 0.88;
         ctx.drawImage(img, cloudX - dw / 2, screenY - dh / 2, dw, dh);
         ctx.restore();
