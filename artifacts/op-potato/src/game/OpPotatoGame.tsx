@@ -1154,7 +1154,10 @@ function drawParticle(ctx: CanvasRenderingContext2D, p: Particle) {
   ctx.globalAlpha = 1;
 }
 
-function drawHUD(ctx: CanvasRenderingContext2D, score: number, buffLevel: number, playerState: PlayerState, bestScore: number) {
+function drawHUD(ctx: CanvasRenderingContext2D, score: number, buffLevel: number, playerState: PlayerState, bestScore: number, safeTop = 0) {
+  ctx.save();
+  ctx.translate(0, safeTop);
+
   // Score panel
   ctx.fillStyle = "rgba(0,0,0,0.4)";
   drawRoundRect(ctx, 10, 70, 140, 54, 12);
@@ -1211,6 +1214,8 @@ function drawHUD(ctx: CanvasRenderingContext2D, score: number, buffLevel: number
     ctx.textAlign = "center";
     ctx.fillText("🍟 FRENCH FRIED!", CANVAS_W / 2, 93);
   }
+
+  ctx.restore();
 }
 
 function drawMenu(ctx: CanvasRenderingContext2D, bestScore: number, t: number, sprites: SpriteMap | null = null) {
@@ -2098,6 +2103,8 @@ export default function OpPotatoGame() {
   const adsRemoved = true;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasScaleRef = useRef({ x: 1, y: 1 });
+  const safeTopRef = useRef(0);
   const stateRef = useRef<GameState>(makeInitialState(0));
   const rafRef = useRef<number>(0);
   const lastTRef = useRef<number>(0);
@@ -2316,24 +2323,22 @@ export default function OpPotatoGame() {
     const cw = window.innerWidth;
     const ch = window.innerHeight;
     const safeTop = getSafeAreaTop();
-    const availH = ch - safeTop;
-    const scale = Math.min(cw / CANVAS_W, availH / CANVAS_H);
-    const drawW = CANVAS_W * scale;
-    const drawH = CANVAS_H * scale;
-    const offsetX = (cw - drawW) / 2;
-    const offsetY = (availH - drawH) / 2;
+    const scaleX = cw / CANVAS_W;
+    const scaleY = ch / CANVAS_H;
+    canvasScaleRef.current = { x: scaleX, y: scaleY };
+    safeTopRef.current = safeTop / scaleY;
 
     canvas.style.position = "absolute";
     canvas.style.left = "0px";
-    canvas.style.top = `${safeTop}px`;
+    canvas.style.top = "0px";
     canvas.style.width = `${cw}px`;
-    canvas.style.height = `${availH}px`;
+    canvas.style.height = `${ch}px`;
     canvas.width = Math.round(cw * ratio);
-    canvas.height = Math.round(availH * ratio);
+    canvas.height = Math.round(ch * ratio);
 
     const ctx = canvas.getContext("2d");
     if (ctx) {
-      ctx.setTransform(ratio * scale, 0, 0, ratio * scale, offsetX * ratio, offsetY * ratio);
+      ctx.setTransform(ratio * scaleX, 0, 0, ratio * scaleY, 0, 0);
     }
   }, []);
 
@@ -2488,7 +2493,7 @@ export default function OpPotatoGame() {
 
     // HUD
     if (gs.phase === "playing" || gs.phase === "dead" || gs.phase === "winning") {
-      drawHUD(ctx, gs.score, gs.player.buffLevel, gs.player.state, gs.bestScore);
+      drawHUD(ctx, gs.score, gs.player.buffLevel, gs.player.state, gs.bestScore, safeTopRef.current);
     }
 
     // Settings button
@@ -2551,11 +2556,10 @@ export default function OpPotatoGame() {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const scaleX = CANVAS_W / rect.width;
-    const scaleY = CANVAS_H / rect.height;
+    const { x: scaleX, y: scaleY } = canvasScaleRef.current;
     return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
+      x: (clientX - rect.left) / scaleX,
+      y: (clientY - rect.top) / scaleY,
     };
   };
 
