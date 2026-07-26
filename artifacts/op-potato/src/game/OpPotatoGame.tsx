@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { SplashScreen } from "./SplashScreen";
 import { HelpScreen } from "./HelpScreen";
 
@@ -2286,7 +2287,10 @@ export default function OpPotatoGame() {
   // Load sounds
   useEffect(() => {
     const load = (src: string, loop = false, volume = 1): HTMLAudioElement => {
-      const a = new Audio(src);
+      const resolvedSrc = Capacitor.getPlatform() === "ios" && src.endsWith(".ogg")
+        ? src.replace(/\.ogg$/, ".mp3")
+        : src;
+      const a = new Audio(resolvedSrc);
       a.loop = loop;
       a.volume = volume;
       a.preload = "auto";
