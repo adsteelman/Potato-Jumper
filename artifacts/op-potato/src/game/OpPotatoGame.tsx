@@ -2323,7 +2323,13 @@ export default function OpPotatoGame() {
     const cw = window.innerWidth;
     const ch = window.innerHeight;
     const safeTop = getSafeAreaTop();
-    const scale = Math.max(cw / CANVAS_W, ch / CANVAS_H);
+    const viewportAspect = cw / ch;
+    const gameAspect = CANVAS_W / CANVAS_H;
+    const aspectDifference = Math.abs(viewportAspect / gameAspect - 1);
+    const useCoverScale = aspectDifference <= 0.18;
+    const scale = useCoverScale
+      ? Math.max(cw / CANVAS_W, ch / CANVAS_H)
+      : Math.min(cw / CANVAS_W, ch / CANVAS_H);
     const offsetX = (cw - CANVAS_W * scale) / 2;
     const offsetY = (ch - CANVAS_H * scale) / 2;
     canvasLayoutRef.current = { scale, offsetX, offsetY };
@@ -2733,7 +2739,7 @@ export default function OpPotatoGame() {
         position: "fixed",
         inset: 0,
         overflow: "hidden",
-        background: "#000",
+        background: "#87ceeb",
         padding: 0,
       }}
     >
