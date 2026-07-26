@@ -68,6 +68,13 @@ interface Cloud {
   scale: number;
 }
 
+interface SafeAreaInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 interface LeaderboardEntry {
   id: number;
   playerName: string;
@@ -1165,22 +1172,24 @@ function drawParticle(ctx: CanvasRenderingContext2D, p: Particle) {
   ctx.globalAlpha = 1;
 }
 
-function drawHUD(ctx: CanvasRenderingContext2D, score: number, buffLevel: number, playerState: PlayerState, bestScore: number, safeTop = 0) {
+function drawHUD(ctx: CanvasRenderingContext2D, score: number, buffLevel: number, playerState: PlayerState, bestScore: number, safeArea: SafeAreaInsets) {
   ctx.save();
-  ctx.translate(0, safeTop);
+  ctx.translate(0, safeArea.top);
+
+  const leftPanelX = safeArea.left + 10;
 
   // Score panel
   ctx.fillStyle = "rgba(0,0,0,0.4)";
-  drawRoundRect(ctx, 10, 70, 140, 54, 12);
+  drawRoundRect(ctx, leftPanelX, 70, 140, 54, 12);
   ctx.fill();
 
   ctx.fillStyle = "#fff";
   ctx.font = "bold 22px 'Fredoka One', cursive";
   ctx.textAlign = "left";
-  ctx.fillText(score.toLocaleString(), 20, 95);
+  ctx.fillText(score.toLocaleString(), leftPanelX + 10, 95);
   ctx.font = "12px 'Fredoka One', cursive";
   ctx.fillStyle = "rgba(255,255,255,0.7)";
-  ctx.fillText(`BEST: ${bestScore.toLocaleString()}`, 20, 115);
+  ctx.fillText(`BEST: ${bestScore.toLocaleString()}`, leftPanelX + 10, 115);
 
   // Buff level display
   const potatoNames = ["Raw", "Fresh", "Cookin'", "Buff", "OP POTATO!"];
@@ -1191,18 +1200,19 @@ function drawHUD(ctx: CanvasRenderingContext2D, score: number, buffLevel: number
   const bcolor = buffColors[Math.min(buffLevel, 4)];
 
   const bw = 150;
+  const rightPanelX = CANVAS_W - safeArea.right - bw - 10;
   ctx.fillStyle = "rgba(0,0,0,0.4)";
-  drawRoundRect(ctx, CANVAS_W - bw - 10, 70, bw, 54, 12);
+  drawRoundRect(ctx, rightPanelX, 70, bw, 54, 12);
   ctx.fill();
 
   ctx.fillStyle = bcolor;
   ctx.font = "bold 14px 'Fredoka One', cursive";
   ctx.textAlign = "right";
-  ctx.fillText(bname, CANVAS_W - 18, 90);
+  ctx.fillText(bname, rightPanelX + bw - 8, 90);
 
   // Buff progress pips
   const pipW = 22;
-  const pipStartX = CANVAS_W - bw - 5 + (bw - (5 * pipW + 4 * 4)) / 2;
+  const pipStartX = rightPanelX + 5 + (bw - (5 * pipW + 4 * 4)) / 2;
   for (let i = 0; i < 5; i++) {
     const px = pipStartX + i * (pipW + 4);
     ctx.fillStyle = i <= buffLevel ? buffColors[i] : "rgba(255,255,255,0.15)";
@@ -1408,13 +1418,19 @@ function drawSettingsPanel(
   ctx.fillText("Done", CANVAS_W / 2, SET_DONE_BTN.y + 25);
 }
 
-function drawSettingsButton(ctx: CanvasRenderingContext2D) {
+function getSettingsButtonBounds(safeArea: SafeAreaInsets) {
+  const padding = 18;
+  return { x: CANVAS_W - safeArea.right - padding - 44, y: CANVAS_H - safeArea.bottom - padding - 44, w: 44, h: 44 };
+}
+
+function drawSettingsButton(ctx: CanvasRenderingContext2D, safeArea: SafeAreaInsets) {
+  const button = getSettingsButtonBounds(safeArea);
   ctx.fillStyle = "rgba(0,0,0,0.35)";
-  drawRoundRect(ctx, CANVAS_W - 54, CANVAS_H - 54, 44, 44, 10);
+  drawRoundRect(ctx, button.x, button.y, button.w, button.h, 10);
   ctx.fill();
   ctx.font = "24px 'Fredoka One', cursive";
   ctx.textAlign = "center";
-  ctx.fillText("⚙", CANVAS_W - 32, CANVAS_H - 24);
+  ctx.fillText("⚙", button.x + button.w / 2, button.y + 30);
 }
 
 function drawTapZones(ctx: CanvasRenderingContext2D) {
@@ -2118,7 +2134,7 @@ export default function OpPotatoGame() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasLayoutRef = useRef({ scale: 1, offsetX: 0, offsetY: 0 });
-  const safeTopRef = useRef(0);
+  const safeAreaRef = useRef<SafeAreaInsets>({ top: 0, right: 0, bottom: 0, left: 0 });
   const stateRef = useRef<GameState>(makeInitialState(0));
   const rafRef = useRef<number>(0);
   const lastTRef = useRef<number>(0);
@@ -2314,18 +2330,27 @@ export default function OpPotatoGame() {
     return 1;
   };
 
-  const getSafeAreaTop = () => {
-    if (typeof document === "undefined") return 0;
+  const getSafeAreaInsets = (): SafeAreaInsets => {
+    if (typeof document === "undefined") return { top: 0, right: 0, bottom: 0, left: 0 };
     const probe = document.createElement("div");
     probe.style.position = "fixed";
     probe.style.top = "0px";
-    probe.style.height = "env(safe-area-inset-top)";
+    probe.style.paddingTop = "env(safe-area-inset-top)";
+    probe.style.paddingRight = "env(safe-area-inset-right)";
+    probe.style.paddingBottom = "env(safe-area-inset-bottom)";
+    probe.style.paddingLeft = "env(safe-area-inset-left)";
     probe.style.visibility = "hidden";
     probe.style.pointerEvents = "none";
     document.body.appendChild(probe);
-    const inset = parseFloat(getComputedStyle(probe).height) || 0;
+    const style = getComputedStyle(probe);
+    const insets = {
+      top: parseFloat(style.paddingTop) || 0,
+      right: parseFloat(style.paddingRight) || 0,
+      bottom: parseFloat(style.paddingBottom) || 0,
+      left: parseFloat(style.paddingLeft) || 0,
+    };
     document.body.removeChild(probe);
-    return inset;
+    return insets;
   };
 
   const AD_BANNER_H = adsRemoved ? 0 : 60;
@@ -2336,7 +2361,7 @@ export default function OpPotatoGame() {
 
     const cw = window.innerWidth;
     const ch = window.innerHeight;
-    const safeTop = getSafeAreaTop();
+    const safeArea = getSafeAreaInsets();
     const viewportAspect = cw / ch;
     const gameAspect = CANVAS_W / CANVAS_H;
     const aspectDifference = Math.abs(viewportAspect / gameAspect - 1);
@@ -2347,7 +2372,12 @@ export default function OpPotatoGame() {
     const offsetX = (cw - CANVAS_W * scale) / 2;
     const offsetY = (ch - CANVAS_H * scale) / 2;
     canvasLayoutRef.current = { scale, offsetX, offsetY };
-    safeTopRef.current = safeTop / scale;
+    safeAreaRef.current = {
+      top: Math.max(0, (safeArea.top - offsetY) / scale),
+      right: Math.max(0, (safeArea.right - offsetX) / scale),
+      bottom: Math.max(0, (safeArea.bottom - offsetY) / scale),
+      left: Math.max(0, (safeArea.left - offsetX) / scale),
+    };
 
     canvas.style.position = "absolute";
     canvas.style.left = "0px";
@@ -2514,12 +2544,12 @@ export default function OpPotatoGame() {
 
     // HUD
     if (gs.phase === "playing" || gs.phase === "dead" || gs.phase === "winning") {
-      drawHUD(ctx, gs.score, gs.player.buffLevel, gs.player.state, gs.bestScore, safeTopRef.current);
+      drawHUD(ctx, gs.score, gs.player.buffLevel, gs.player.state, gs.bestScore, safeAreaRef.current);
     }
 
     // Settings button
     if (!gs.showSettings && gs.phase !== "winning" && gs.phase !== "won" && gs.phase !== "leaderboard") {
-      drawSettingsButton(ctx);
+      drawSettingsButton(ctx, safeAreaRef.current);
     }
 
     // Dead screen overlay
@@ -2621,7 +2651,9 @@ export default function OpPotatoGame() {
     }
 
     // Settings button
-    if (x > CANVAS_W - 54 && y > CANVAS_H - 54) {
+    const settingsButton = getSettingsButtonBounds(safeAreaRef.current);
+    if (x > settingsButton.x && x < settingsButton.x + settingsButton.w &&
+        y > settingsButton.y && y < settingsButton.y + settingsButton.h) {
       gs.showSettings = true;
       return;
     }
