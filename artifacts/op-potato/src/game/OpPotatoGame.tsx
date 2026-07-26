@@ -174,6 +174,10 @@ function saveAudioPref(key: string, value: boolean) {
   }
 }
 
+function logAudioFailure(action: string, error: unknown) {
+  if (import.meta.env.DEV) console.error(`[audio] ${action} failed`, error);
+}
+
 function initPlatforms(startY: number): { platforms: Platform[]; nextId: number } {
   const platforms: Platform[] = [];
   let id = 0;
@@ -1449,9 +1453,19 @@ function drawTapZones(ctx: CanvasRenderingContext2D) {
 
 // ─── WIN SEQUENCE HELPERS ─────────────────────────────────────────────────────
 
+let victoryAudioContext: AudioContext | null = null;
+
+function getVictoryAudioContext() {
+  if (!victoryAudioContext || victoryAudioContext.state === "closed") {
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    victoryAudioContext = new AudioContextClass();
+  }
+  return victoryAudioContext;
+}
+
 function playVictoryFanfare() {
   try {
-    const actx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const actx = getVictoryAudioContext();
     // Ascending arpeggio: C5 E5 G5 C6 E6
     const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5];
     const timings = [0, 0.13, 0.26, 0.39, 0.55];
@@ -1478,7 +1492,9 @@ function playVictoryFanfare() {
     bg.gain.linearRampToValueAtTime(0.38, bt + 0.04);
     bg.gain.exponentialRampToValueAtTime(0.001, bt + 0.9);
     bass.start(bt); bass.stop(bt + 0.95);
-  } catch (_) { /* audio not available */ }
+  } catch (error) {
+    logAudioFailure("victory fanfare", error);
+  }
 }
 
 function spawnConfetti(gs: GameState) {
@@ -2180,6 +2196,7 @@ export default function OpPotatoGame() {
     mashed: null, powerUp: null, bgMusic: null,
   });
   const prevPhaseRef = useRef<GamePhase>("menu");
+  const gestureMusicStartRef = useRef(false);
 
   // Load sprite images once on mount
   useEffect(() => {
@@ -2274,7 +2291,7 @@ export default function OpPotatoGame() {
     const onMusicPause = () => {
       const gs = stateRef.current;
       if (gs.phase === "playing" && gs.musicOn) {
-        bgMusic?.play().catch(() => {});
+        bgMusic?.play().catch((error) => logAudioFailure("resume background music after pause", error));
       }
     };
     bgMusic?.addEventListener("pause", onMusicPause);
@@ -2290,6 +2307,27 @@ export default function OpPotatoGame() {
     if (!stateRef.current.soundOn) return;
     el.currentTime = 0;
     el.play().catch(() => {});
+  }, []);
+
+  const startAudioFromGesture = useCallback(() => {
+    try {
+      const audioContext = getVictoryAudioContext();
+      if (audioContext.state === "suspended") {
+        audioContext.resume().catch((error) => logAudioFailure("unlock victory AudioContext", error));
+      }
+    } catch (error) {
+      logAudioFailure("initialize victory AudioContext", error);
+    }
+
+    const gs = stateRef.current;
+    const bgMusic = soundsRef.current.bgMusic;
+    if (bgMusic) {
+      bgMusic.currentTime = 0;
+      if (gs.musicOn) {
+        bgMusic.play().catch((error) => logAudioFailure("start background music from user gesture", error));
+      }
+    }
+    gestureMusicStartRef.current = true;
   }, []);
 
   const fetchLeaderboard = useCallback(async () => {
@@ -2439,9 +2477,11 @@ export default function OpPotatoGame() {
       const s = soundsRef.current;
       // Every new game (any phase → "playing") restarts the loop from the beginning
       if (gs.phase === "playing" && prevPhase !== "playing") {
-        if (s.bgMusic) {
+        if (gestureMusicStartRef.current) {
+          gestureMusicStartRef.current = false;
+        } else if (s.bgMusic) {
           s.bgMusic.currentTime = 0;
-          if (gs.musicOn) s.bgMusic.play().catch(() => {});
+          if (gs.musicOn) s.bgMusic.play().catch((error) => logAudioFailure("restart background music on phase change", error));
         }
       }
       if (gs.phase === "dead") {
@@ -2634,7 +2674,9 @@ export default function OpPotatoGame() {
         saveAudioPref(MUSIC_PREF_KEY, gs.musicOn);
         const bgMusic = soundsRef.current.bgMusic;
         if (bgMusic) {
-          if (gs.musicOn && gs.phase === "playing") bgMusic.play().catch(() => {});
+          if (gs.musicOn && gs.phase === "playing") {
+            bgMusic.play().catch((error) => logAudioFailure("enable background music from settings", error));
+          }
           else bgMusic.pause();
         }
       }
@@ -2666,6 +2708,7 @@ export default function OpPotatoGame() {
         gs.phase = "leaderboard";
         return;
       }
+      startAudioFromGesture();
       gs.phase = "playing";
       return;
     }
@@ -2683,6 +2726,7 @@ export default function OpPotatoGame() {
         const best = gs.bestScore;
         Object.assign(stateRef.current, makeInitialState(best));
         stateRef.current.bestScore = best;
+        startAudioFromGesture();
         stateRef.current.phase = "playing";
       }
       return;
@@ -2709,6 +2753,7 @@ export default function OpPotatoGame() {
         const best = gs.bestScore;
         Object.assign(stateRef.current, makeInitialState(best));
         stateRef.current.bestScore = best;
+        startAudioFromGesture();
         stateRef.current.phase = "playing";
         return;
       }
@@ -2729,6 +2774,7 @@ export default function OpPotatoGame() {
         const best = gs.bestScore;
         Object.assign(stateRef.current, makeInitialState(best));
         stateRef.current.bestScore = best;
+        startAudioFromGesture();
         stateRef.current.phase = "playing";
       }
       return;
@@ -2738,7 +2784,7 @@ export default function OpPotatoGame() {
     if (gs.phase === "playing") {
       tapDirRef.current = x < CANVAS_W / 2 ? -1 : 1;
     }
-  }, [fetchLeaderboard]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchLeaderboard, startAudioFromGesture]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePointerUp = useCallback(() => {
     tapDirRef.current = 0;
