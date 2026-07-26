@@ -175,7 +175,28 @@ function saveAudioPref(key: string, value: boolean) {
 }
 
 function logAudioFailure(action: string, error: unknown) {
-  if (import.meta.env.DEV) console.error(`[audio] ${action} failed`, error);
+  if (import.meta.env.DEV) console.error(`[AUDIO] ${action} failed`, error);
+}
+
+function getAudioDiagnostics(audio: HTMLAudioElement) {
+  return {
+    src: audio.currentSrc || audio.src,
+    paused: audio.paused,
+    muted: audio.muted,
+    volume: audio.volume,
+    readyState: audio.readyState,
+    currentTime: audio.currentTime,
+  };
+}
+
+function playAudioWithDiagnostics(audio: HTMLAudioElement, action: string) {
+  console.log(`[AUDIO] play() called: ${action}`, getAudioDiagnostics(audio));
+  const promise = audio.play();
+  promise.then(
+    () => console.log(`[AUDIO] play() resolved: ${action}`, getAudioDiagnostics(audio)),
+    (error) => console.error(`[AUDIO] play() rejected: ${action}`, error, getAudioDiagnostics(audio)),
+  );
+  return promise;
 }
 
 function initPlatforms(startY: number): { platforms: Platform[]; nextId: number } {
@@ -1459,6 +1480,10 @@ function getVictoryAudioContext() {
   if (!victoryAudioContext || victoryAudioContext.state === "closed") {
     const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     victoryAudioContext = new AudioContextClass();
+    console.log("[AUDIO] AudioContext created", { state: victoryAudioContext.state });
+    victoryAudioContext.addEventListener("statechange", () => {
+      console.log("[AUDIO] AudioContext statechange", { state: victoryAudioContext?.state });
+    });
   }
   return victoryAudioContext;
 }
@@ -2265,6 +2290,12 @@ export default function OpPotatoGame() {
       a.loop = loop;
       a.volume = volume;
       a.preload = "auto";
+      (["loadeddata", "canplay", "canplaythrough", "error", "stalled", "waiting"] as const).forEach((eventName) => {
+        a.addEventListener(eventName, () => {
+          const error = eventName === "error" ? a.error : null;
+          console.log(`[AUDIO] media event: ${eventName}`, getAudioDiagnostics(a), error);
+        });
+      });
       return a;
     };
     soundsRef.current = {
@@ -2291,7 +2322,7 @@ export default function OpPotatoGame() {
     const onMusicPause = () => {
       const gs = stateRef.current;
       if (gs.phase === "playing" && gs.musicOn) {
-        bgMusic?.play().catch((error) => logAudioFailure("resume background music after pause", error));
+        if (bgMusic) playAudioWithDiagnostics(bgMusic, "resume background music after pause");
       }
     };
     bgMusic?.addEventListener("pause", onMusicPause);
@@ -2306,14 +2337,18 @@ export default function OpPotatoGame() {
     if (el === soundsRef.current.bgMusic) return; // never reset the loop
     if (!stateRef.current.soundOn) return;
     el.currentTime = 0;
-    el.play().catch(() => {});
+    playAudioWithDiagnostics(el, "sound effect");
   }, []);
 
   const startAudioFromGesture = useCallback(() => {
     try {
       const audioContext = getVictoryAudioContext();
       if (audioContext.state === "suspended") {
-        audioContext.resume().catch((error) => logAudioFailure("unlock victory AudioContext", error));
+        console.log("[AUDIO] AudioContext resume() called", { state: audioContext.state });
+        audioContext.resume().then(
+          () => console.log("[AUDIO] AudioContext resume() resolved", { state: audioContext.state }),
+          (error) => console.error("[AUDIO] AudioContext resume() rejected", error, { state: audioContext.state }),
+        );
       }
     } catch (error) {
       logAudioFailure("initialize victory AudioContext", error);
@@ -2324,7 +2359,7 @@ export default function OpPotatoGame() {
     if (bgMusic) {
       bgMusic.currentTime = 0;
       if (gs.musicOn) {
-        bgMusic.play().catch((error) => logAudioFailure("start background music from user gesture", error));
+        playAudioWithDiagnostics(bgMusic, "start background music from user gesture");
       }
     }
     gestureMusicStartRef.current = true;
@@ -2481,7 +2516,7 @@ export default function OpPotatoGame() {
           gestureMusicStartRef.current = false;
         } else if (s.bgMusic) {
           s.bgMusic.currentTime = 0;
-          if (gs.musicOn) s.bgMusic.play().catch((error) => logAudioFailure("restart background music on phase change", error));
+          if (gs.musicOn) playAudioWithDiagnostics(s.bgMusic, "restart background music on phase change");
         }
       }
       if (gs.phase === "dead") {
@@ -2675,7 +2710,7 @@ export default function OpPotatoGame() {
         const bgMusic = soundsRef.current.bgMusic;
         if (bgMusic) {
           if (gs.musicOn && gs.phase === "playing") {
-            bgMusic.play().catch((error) => logAudioFailure("enable background music from settings", error));
+            playAudioWithDiagnostics(bgMusic, "enable background music from settings");
           }
           else bgMusic.pause();
         }
