@@ -2662,6 +2662,19 @@ export default function OpPotatoGame() {
     return () => window.removeEventListener("deviceorientation", handleOrientation);
   }, []);
 
+  const initializeTapMode = useCallback(() => {
+    stateRef.current.controlMode = "tap";
+    tiltRef.current = 0;
+    tapDirRef.current = 0;
+    canvasRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  // The initial state can already select Tap mode, without going through the
+  // settings button that normally activates it.
+  useEffect(() => {
+    if (stateRef.current.controlMode === "tap") initializeTapMode();
+  }, [initializeTapMode]);
+
   // Handle canvas interactions
   const getCanvasPoint = (clientX: number, clientY: number): { x: number; y: number } => {
     const canvas = canvasRef.current;
@@ -2686,7 +2699,7 @@ export default function OpPotatoGame() {
       }
       // Tap button
       if (x > SET_TAP_BTN.x && x < SET_TAP_BTN.x + SET_TAP_BTN.w && y > SET_TAP_BTN.y && y < SET_TAP_BTN.y + SET_TAP_BTN.h) {
-        gs.controlMode = "tap";
+        initializeTapMode();
       }
       // Music toggle button
       if (x > SET_MUSIC_BTN.x && x < SET_MUSIC_BTN.x + SET_MUSIC_BTN.w && y > SET_MUSIC_BTN.y && y < SET_MUSIC_BTN.y + SET_MUSIC_BTN.h) {
@@ -2729,6 +2742,7 @@ export default function OpPotatoGame() {
         return;
       }
       startAudioFromGesture();
+      if (gs.controlMode === "tap") initializeTapMode();
       gs.phase = "playing";
       return;
     }
@@ -2857,6 +2871,7 @@ export default function OpPotatoGame() {
     >
       <canvas
         ref={canvasRef}
+        tabIndex={-1}
         style={{ display: "block", touchAction: "none", userSelect: "none" }}
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId);
@@ -2870,7 +2885,10 @@ export default function OpPotatoGame() {
       {showSplash && !showHelp && (
         <SplashScreen
           adBannerH={AD_BANNER_H}
-          onStart={() => setShowSplash(false)}
+          onStart={() => {
+            setShowSplash(false);
+            if (stateRef.current.controlMode === "tap") initializeTapMode();
+          }}
           onHelp={() => setShowHelp(true)}
         />
       )}
