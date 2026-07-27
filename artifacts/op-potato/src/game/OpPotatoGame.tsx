@@ -2669,11 +2669,11 @@ export default function OpPotatoGame() {
     canvasRef.current?.focus({ preventScroll: true });
   }, []);
 
-  // The initial state can already select Tap mode, without going through the
-  // settings button that normally activates it.
+  // Initialize Tap mode after the splash overlay has actually unmounted so
+  // its start control cannot retain focus over the canvas.
   useEffect(() => {
-    if (stateRef.current.controlMode === "tap") initializeTapMode();
-  }, [initializeTapMode]);
+    if (!showSplash && stateRef.current.controlMode === "tap") initializeTapMode();
+  }, [showSplash, initializeTapMode]);
 
   // Handle canvas interactions
   const getCanvasPoint = (clientX: number, clientY: number): { x: number; y: number } => {
@@ -2842,8 +2842,13 @@ export default function OpPotatoGame() {
       if (e.type === "keydown") {
         const gs = stateRef.current;
         if (gs.showSettings || showSplash || showHelp || showNameInput) return;
-        if (gs.phase === "menu") { gs.phase = "playing"; return; }
+        if (gs.phase === "menu") {
+          if (gs.controlMode === "tap") initializeTapMode();
+          gs.phase = "playing";
+          return;
+        }
         if (gs.phase === "dead" || gs.phase === "won") {
+          if (gs.controlMode === "tap") initializeTapMode();
           const best = gs.bestScore;
           Object.assign(stateRef.current, makeInitialState(best));
           stateRef.current.bestScore = best;
@@ -2857,7 +2862,7 @@ export default function OpPotatoGame() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKey);
     };
-  }, [showSplash, showHelp, showNameInput]);
+  }, [showSplash, showHelp, showNameInput, initializeTapMode]);
 
   return (
     <div
@@ -2885,10 +2890,7 @@ export default function OpPotatoGame() {
       {showSplash && !showHelp && (
         <SplashScreen
           adBannerH={AD_BANNER_H}
-          onStart={() => {
-            setShowSplash(false);
-            if (stateRef.current.controlMode === "tap") initializeTapMode();
-          }}
+          onStart={() => setShowSplash(false)}
           onHelp={() => setShowHelp(true)}
         />
       )}
