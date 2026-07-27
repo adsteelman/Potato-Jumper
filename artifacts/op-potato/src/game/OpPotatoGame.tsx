@@ -1459,20 +1459,6 @@ function drawSettingsButton(ctx: CanvasRenderingContext2D, safeArea: SafeAreaIns
   ctx.fillText("⚙", button.x + button.w / 2, button.y + 30);
 }
 
-function drawTapZones(ctx: CanvasRenderingContext2D) {
-  // Subtle left/right tap zone indicators at bottom
-  ctx.fillStyle = "rgba(255,255,255,0.06)";
-  ctx.fillRect(0, CANVAS_H - 130, CANVAS_W / 2, 130);
-  ctx.fillStyle = "rgba(255,255,255,0.06)";
-  ctx.fillRect(CANVAS_W / 2, CANVAS_H - 130, CANVAS_W / 2, 130);
-  // Arrows
-  ctx.fillStyle = "rgba(255,255,255,0.18)";
-  ctx.font = "28px 'Fredoka One', cursive";
-  ctx.textAlign = "center";
-  ctx.fillText("◀", CANVAS_W / 4, CANVAS_H - 40);
-  ctx.fillText("▶", (CANVAS_W * 3) / 4, CANVAS_H - 40);
-}
-
 // ─── WIN SEQUENCE HELPERS ─────────────────────────────────────────────────────
 
 let victoryAudioContext: AudioContext | null = null;
@@ -2546,11 +2532,6 @@ export default function OpPotatoGame() {
     ctx.clip();
 
     drawBackground(ctx, gs.cameraY, gs.score, t, spritesRef.current, gs.clouds);
-
-    // Draw tap zones in play mode
-    if (gs.phase === "playing" && gs.controlMode === "tap") {
-      drawTapZones(ctx);
-    }
 
     // Draw platforms
     for (const plat of gs.platforms) {
