@@ -2167,6 +2167,8 @@ export default function OpPotatoGame() {
   const tapDirRef = useRef(0);
   const leftHeldRef = useRef(false);
   const rightHeldRef = useRef(false);
+  const [assetsReady, setAssetsReady] = useState(false);
+  const assetReadinessRef = useRef({ sprites: false, audio: false });
 
   // Splash / help screens
   const [showSplash, setShowSplash] = useState(true);
@@ -2214,17 +2216,39 @@ export default function OpPotatoGame() {
     rightHeldRef.current = false;
   }, []);
 
+  const markAssetGroupReady = useCallback((group: "sprites" | "audio") => {
+    assetReadinessRef.current[group] = true;
+    if (assetReadinessRef.current.sprites && assetReadinessRef.current.audio) {
+      setAssetsReady(true);
+    }
+  }, []);
+
   // Load sprite images once on mount
   useEffect(() => {
+    let active = true;
     // Preload Fredoka One so canvas draws it immediately
     document.fonts.load("16px 'Fredoka One'").catch(() => {});
     // Loads a sprite and restores near-white semi-transparent pixels to fully opaque.
     // Background-removal tools often make white sprite detail (fur, teeth, bandage) transparent;
     // this one-time pixel pass fixes that before the first draw.
+    const spriteReadyPromises: Promise<void>[] = [];
+    const waitForImageLoad = (img: HTMLImageElement) => new Promise<void>((resolve, reject) => {
+      if (img.complete) {
+        if (img.naturalWidth > 0) resolve();
+        else reject(new Error(`Failed to load sprite: ${img.src}`));
+        return;
+      }
+      img.addEventListener("load", () => resolve(), { once: true });
+      img.addEventListener("error", () => reject(new Error(`Failed to load sprite: ${img.src}`)), { once: true });
+    });
     const loadSprite = (src: string): HTMLCanvasElement => {
       const canvas = document.createElement("canvas");
       const img = new Image();
-      img.onload = () => {
+      img.src = src;
+      const decoded = typeof img.decode === "function"
+        ? img.decode().catch(() => waitForImageLoad(img))
+        : waitForImageLoad(img);
+      const ready = decoded.then(() => {
         canvas.width = img.naturalWidth;
         canvas.height = img.naturalHeight;
         const c = canvas.getContext("2d");
@@ -2240,8 +2264,8 @@ export default function OpPotatoGame() {
           }
         }
         c.putImageData(imageData, 0, 0);
-      };
-      img.src = src;
+      });
+      spriteReadyPromises.push(ready);
       return canvas;
     };
     const loadImg = loadSprite; // alias kept so call sites below need no change
@@ -2272,18 +2296,49 @@ export default function OpPotatoGame() {
       cloud: loadImg("/sprites/cloud.png"),
       title: loadImg("/sprites/title.png"),
     };
-  }, []);
+    Promise.all(spriteReadyPromises).then(
+      () => { if (active) markAssetGroupReady("sprites"); },
+      (error) => logAudioFailure("preload gameplay sprites", error),
+    );
+    return () => { active = false; };
+  }, [markAssetGroupReady]);
 
   // Load sounds
   useEffect(() => {
+    let active = true;
+    const audioReadyPromises: Promise<void>[] = [];
+    const readinessCleanups: Array<() => void> = [];
     const load = (src: string, loop = false, volume = 1): HTMLAudioElement => {
       const resolvedSrc = Capacitor.getPlatform() === "ios" && src.endsWith(".ogg")
         ? src.replace(/\.ogg$/, ".mp3")
         : src;
-      const a = new Audio(resolvedSrc);
+      const a = new Audio();
       a.loop = loop;
       a.volume = volume;
       a.preload = "auto";
+      const ready = new Promise<void>((resolve, reject) => {
+        const cleanup = () => {
+          a.removeEventListener("canplaythrough", onReady);
+          a.removeEventListener("canplay", onReady);
+          a.removeEventListener("error", onError);
+        };
+        const onReady = () => {
+          if (a.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) return;
+          cleanup();
+          resolve();
+        };
+        const onError = () => {
+          cleanup();
+          reject(new Error(`Failed to preload audio: ${resolvedSrc}`));
+        };
+        a.addEventListener("canplaythrough", onReady);
+        a.addEventListener("canplay", onReady);
+        a.addEventListener("error", onError);
+        readinessCleanups.push(cleanup);
+      });
+      audioReadyPromises.push(ready);
+      a.src = resolvedSrc;
+      a.load();
       return a;
     };
     soundsRef.current = {
@@ -2303,6 +2358,10 @@ export default function OpPotatoGame() {
       powerUp:       load("/sounds/PowerUP.ogg",                false, 0.75),
       bgMusic:       load("/sounds/loop.ogg",                   true,  0.35),
     };
+    Promise.all(audioReadyPromises).then(
+      () => { if (active) markAssetGroupReady("audio"); },
+      (error) => logAudioFailure("preload reusable audio", error),
+    );
     // Browsers occasionally interrupt background audio (tab backgrounding, phone
     // calls, etc.) by pausing the element outside of our own pause() calls. Resume
     // it automatically unless the pause matches a state we intentionally paused for.
@@ -2315,10 +2374,12 @@ export default function OpPotatoGame() {
     };
     bgMusic?.addEventListener("pause", onMusicPause);
     return () => {
+      active = false;
+      readinessCleanups.forEach((cleanup) => cleanup());
       bgMusic?.removeEventListener("pause", onMusicPause);
       bgMusic?.pause();
     };
-  }, []);
+  }, [markAssetGroupReady]);
 
   const playOneShot = useCallback((el: HTMLAudioElement | null) => {
     if (!el) return;
@@ -2764,6 +2825,7 @@ export default function OpPotatoGame() {
         gs.phase = "leaderboard";
         return;
       }
+      if (!assetsReady) return;
       startAudioFromGesture();
       if (gs.controlMode === "tap") initializeTapMode();
       gs.phase = "playing";
@@ -2780,6 +2842,7 @@ export default function OpPotatoGame() {
       }
       if (x >= DEAD_REPLAY_BTN.x && x <= DEAD_REPLAY_BTN.x + DEAD_REPLAY_BTN.w &&
           y >= DEAD_REPLAY_BTN.y && y <= DEAD_REPLAY_BTN.y + DEAD_REPLAY_BTN.h) {
+        if (!assetsReady) return;
         const best = gs.bestScore;
         clearHeldKeys();
         Object.assign(stateRef.current, makeInitialState(best));
@@ -2808,6 +2871,7 @@ export default function OpPotatoGame() {
       // Replay button
       if (x >= WIN_REPLAY_BTN.x && x <= WIN_REPLAY_BTN.x + WIN_REPLAY_BTN.w &&
           y >= WIN_REPLAY_BTN.y && y <= WIN_REPLAY_BTN.y + WIN_REPLAY_BTN.h) {
+        if (!assetsReady) return;
         const best = gs.bestScore;
         clearHeldKeys();
         Object.assign(stateRef.current, makeInitialState(best));
@@ -2830,6 +2894,7 @@ export default function OpPotatoGame() {
     if (gs.phase === "leaderboard") {
       if (x >= LB_PLAY_BTN.x && x <= LB_PLAY_BTN.x + LB_PLAY_BTN.w &&
           y >= LB_PLAY_BTN.y && y <= LB_PLAY_BTN.y + LB_PLAY_BTN.h) {
+        if (!assetsReady) return;
         const best = gs.bestScore;
         clearHeldKeys();
         Object.assign(stateRef.current, makeInitialState(best));
@@ -2845,7 +2910,7 @@ export default function OpPotatoGame() {
       tapDirRef.current = x < CANVAS_W / 2 ? -1 : 1;
       return;
     }
-  }, [fetchLeaderboard, startAudioFromGesture]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [assetsReady, fetchLeaderboard, startAudioFromGesture]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePointerUp = useCallback(() => {
     tapDirRef.current = 0;
@@ -2864,11 +2929,13 @@ export default function OpPotatoGame() {
         return;
       }
       if (gs.phase === "menu") {
+        if (!assetsReady) return;
         if (gs.controlMode === "tap") initializeTapMode();
         gs.phase = "playing";
         return;
       }
       if (gs.phase === "dead" || gs.phase === "won") {
+        if (!assetsReady) return;
         if (gs.controlMode === "tap") initializeTapMode();
         const best = gs.bestScore;
         clearHeldKeys();
@@ -2889,7 +2956,7 @@ export default function OpPotatoGame() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [showSplash, showHelp, showNameInput, initializeTapMode, clearHeldKeys]);
+  }, [assetsReady, showSplash, showHelp, showNameInput, initializeTapMode, clearHeldKeys]);
 
   return (
     <div
