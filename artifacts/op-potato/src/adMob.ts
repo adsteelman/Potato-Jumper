@@ -7,7 +7,7 @@ import {
   type AdMobError,
 } from "@capacitor-community/admob";
 
-const IOS_TEST_BANNER_ID = "ca-app-pub-3940256099942544/2934735716";
+const IOS_TEST_BANNER_ID = "ca-app-pub-3940256099942544/2435281174";
 const ANDROID_TEST_BANNER_ID = "ca-app-pub-3940256099942544/6300978111";
 
 function isSupportedNativePlatform(platform: string): platform is "ios" | "android" {
