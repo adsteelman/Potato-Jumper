@@ -1718,14 +1718,18 @@ function drawLeaderboard(
   ctx: CanvasRenderingContext2D,
   entries: LeaderboardEntry[],
   loading: boolean,
-  t: number
+  t: number,
+  safeArea: SafeAreaInsets
 ) {
+  const topOffset = safeArea.top;
+
   // Background
   ctx.fillStyle = "rgba(10,5,30,0.96)";
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
   // Header glow
-  const glow = ctx.createRadialGradient(CANVAS_W / 2, 80, 10, CANVAS_W / 2, 80, 160);
+  const glowY = 80 + topOffset;
+  const glow = ctx.createRadialGradient(CANVAS_W / 2, glowY, 10, CANVAS_W / 2, glowY, 160);
   glow.addColorStop(0, "rgba(255,215,0,0.22)");
   glow.addColorStop(1, "rgba(255,150,0,0)");
   ctx.fillStyle = glow;
@@ -1736,11 +1740,11 @@ function drawLeaderboard(
   ctx.font = "bold 36px 'Fredoka One', cursive";
   ctx.fillStyle = "#FFD700";
   ctx.shadowColor = "#FF8C00"; ctx.shadowBlur = 18;
-  ctx.fillText("🏆 TOP 10", CANVAS_W / 2, 60);
+  ctx.fillText("🏆 TOP 10", CANVAS_W / 2, 60 + topOffset);
   ctx.shadowBlur = 0;
   ctx.font = "13px 'Fredoka One', cursive";
   ctx.fillStyle = "rgba(255,255,255,0.5)";
-  ctx.fillText("Global Leaderboard", CANVAS_W / 2, 84);
+  ctx.fillText("Global Leaderboard", CANVAS_W / 2, 84 + topOffset);
 
   if (loading) {
     ctx.fillStyle = "rgba(255,255,255,0.7)";
@@ -1753,7 +1757,7 @@ function drawLeaderboard(
     ctx.fillText("No scores yet — be the first!", CANVAS_W / 2, 380);
   } else {
     const rowH = 46;
-    const startY = 108;
+    const startY = 108 + topOffset;
     for (let i = 0; i < entries.length; i++) {
       const e = entries[i];
       const ry = startY + i * rowH;
@@ -2699,7 +2703,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
 
     // Leaderboard screen
     if (gs.phase === "leaderboard") {
-      drawLeaderboard(ctx, leaderboardRef.current, leaderboardLoadingRef.current, t);
+      drawLeaderboard(ctx, leaderboardRef.current, leaderboardLoadingRef.current, t, safeAreaRef.current);
     }
 
     // Settings panel

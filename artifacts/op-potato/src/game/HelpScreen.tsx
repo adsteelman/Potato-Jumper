@@ -71,17 +71,21 @@ export function HelpScreen({ onBack, adBannerH }: Props) {
         fontFamily: FONT,
         userSelect: "none",
         WebkitUserSelect: "none",
+        pointerEvents: "auto",
       }}
     >
       {/* Fixed header */}
       <div style={{
         display: "flex",
         alignItems: "center",
-        padding: "14px 16px 10px",
+        padding: "calc(14px + env(safe-area-inset-top, 0px)) 16px 10px",
         background: "rgba(255,255,255,0.35)",
         borderBottom: "1.5px solid rgba(255,255,255,0.6)",
         flexShrink: 0,
         gap: 12,
+        position: "relative",
+        zIndex: 1,
+        pointerEvents: "auto",
       }}>
         <div
           style={{
@@ -92,6 +96,14 @@ export function HelpScreen({ onBack, adBannerH }: Props) {
             color: HEADING,
             border: "1.5px solid rgba(255,255,255,0.7)",
             cursor: "pointer",
+            minWidth: 44,
+            minHeight: 44,
+            boxSizing: "border-box",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "auto",
+            touchAction: "manipulation",
           }}
           onPointerDown={(e) => { e.stopPropagation(); onBack(); }}
         >
