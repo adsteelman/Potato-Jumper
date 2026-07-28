@@ -2153,9 +2153,11 @@ function tickGame(gs: GameState, tiltX: number, tapDir: number, dt: number, onSo
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
-export default function OpPotatoGame() {
-  // Set to true to remove ads and expand canvas to full screen
-  const adsRemoved = true;
+interface OpPotatoGameProps {
+  adsEnabled: boolean;
+}
+
+export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasLayoutRef = useRef({ scale: 1, offsetX: 0, offsetY: 0 });
@@ -2475,15 +2477,18 @@ export default function OpPotatoGame() {
     return insets;
   };
 
-  const AD_BANNER_H = adsRemoved ? 0 : 60;
+  const AD_BANNER_HEIGHT = adsEnabled ? 50 : 0;
+  const AD_BANNER_H = adsEnabled
+    ? "calc(50px + env(safe-area-inset-bottom))"
+    : 0;
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ratio = getPixelRatio();
 
-    const cw = window.innerWidth;
-    const ch = window.innerHeight;
     const safeArea = getSafeAreaInsets();
+    const cw = window.innerWidth;
+    const ch = window.innerHeight - AD_BANNER_HEIGHT - (adsEnabled ? safeArea.bottom : 0);
     const viewportAspect = cw / ch;
     const gameAspect = CANVAS_W / CANVAS_H;
     const aspectDifference = Math.abs(viewportAspect / gameAspect - 1);
@@ -2513,7 +2518,7 @@ export default function OpPotatoGame() {
     if (ctx) {
       ctx.setTransform(ratio * scale, 0, 0, ratio * scale, offsetX * ratio, offsetY * ratio);
     }
-  }, []);
+  }, [AD_BANNER_HEIGHT, adsEnabled]);
 
   const render = useCallback((t: number) => {
     const canvas = canvasRef.current;
@@ -2995,11 +3000,11 @@ export default function OpPotatoGame() {
       )}
 
       {/* Ad banner strip — only shown when ads are active */}
-      {!adsRemoved && (
+      {adsEnabled && (
         <div
           style={{
             position: "absolute", left: 0, right: 0, bottom: 0,
-            height: 60,
+            height: AD_BANNER_H,
             background: "#111",
             zIndex: 30,
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -3011,7 +3016,7 @@ export default function OpPotatoGame() {
       {showNameInput && (
         <div
           style={{
-            position: "absolute", inset: 0, bottom: 60,
+            position: "absolute", inset: 0, bottom: AD_BANNER_H,
             display: "flex", alignItems: "center", justifyContent: "center",
             background: "rgba(10,5,30,0.88)", zIndex: 10,
           }}

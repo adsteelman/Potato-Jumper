@@ -3,7 +3,7 @@ import { useState } from "react";
 interface Props {
   onStart: () => void;
   onHelp: () => void;
-  adBannerH: number;
+  adBannerH: number | string;
 }
 
 export function SplashScreen({ onStart, onHelp, adBannerH }: Props) {

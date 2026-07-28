@@ -1,6 +1,6 @@
 interface Props {
   onBack: () => void;
-  adBannerH: number;
+  adBannerH: number | string;
 }
 
 const SKY = "linear-gradient(180deg, #c9eaff 0%, #87CEEB 60%, #b5e0ff 100%)";
