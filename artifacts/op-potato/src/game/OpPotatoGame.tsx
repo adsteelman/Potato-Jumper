@@ -1468,9 +1468,6 @@ function getVictoryAudioContext() {
     const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     victoryAudioContext = new AudioContextClass();
     console.log("[AUDIO] AudioContext created", { state: victoryAudioContext.state });
-    victoryAudioContext.addEventListener("statechange", () => {
-      console.log("[AUDIO] AudioContext statechange", { state: victoryAudioContext?.state });
-    });
   }
   return victoryAudioContext;
 }
@@ -2168,6 +2165,8 @@ export default function OpPotatoGame() {
   const lastTRef = useRef<number>(0);
   const tiltRef = useRef(0);
   const tapDirRef = useRef(0);
+  const leftHeldRef = useRef(false);
+  const rightHeldRef = useRef(false);
 
   // Splash / help screens
   const [showSplash, setShowSplash] = useState(true);
@@ -2209,6 +2208,11 @@ export default function OpPotatoGame() {
   });
   const prevPhaseRef = useRef<GamePhase>("menu");
   const gestureMusicStartRef = useRef(false);
+
+  const clearHeldKeys = useCallback(() => {
+    leftHeldRef.current = false;
+    rightHeldRef.current = false;
+  }, []);
 
   // Load sprite images once on mount
   useEffect(() => {
@@ -2280,12 +2284,6 @@ export default function OpPotatoGame() {
       a.loop = loop;
       a.volume = volume;
       a.preload = "auto";
-      (["loadeddata", "canplay", "canplaythrough", "error", "stalled", "waiting"] as const).forEach((eventName) => {
-        a.addEventListener(eventName, () => {
-          const error = eventName === "error" ? a.error : null;
-          console.log(`[AUDIO] media event: ${eventName}`, getAudioDiagnostics(a), error);
-        });
-      });
       return a;
     };
     soundsRef.current = {
@@ -2463,6 +2461,12 @@ export default function OpPotatoGame() {
     if (!ctx) return;
 
     const gs = stateRef.current;
+    const keyboardDirection =
+      leftHeldRef.current === rightHeldRef.current
+        ? 0
+        : leftHeldRef.current
+          ? -1
+          : 1;
     const dt = Math.min(t - lastTRef.current, 32);
     lastTRef.current = t;
 
@@ -2493,13 +2497,17 @@ export default function OpPotatoGame() {
 
     // Tick game (slowed during winning)
     if ((gs.phase === "playing" || gs.phase === "winning") && !gs.showSettings) {
-      tickGame(gs, tiltRef.current, tapDirRef.current, dt * (gs.phase === "winning" ? gs.slowMo : 1), onSound);
+      const movementDirection = keyboardDirection !== 0 ? keyboardDirection : tapDirRef.current;
+      tickGame(gs, tiltRef.current, movementDirection, dt * (gs.phase === "winning" ? gs.slowMo : 1), onSound);
     }
 
     // Phase-change side-effects: music start / stop / mashed
     const prevPhase = prevPhaseRef.current;
     if (prevPhase !== gs.phase) {
       const s = soundsRef.current;
+      if (prevPhase === "playing" && gs.phase !== "playing") {
+        clearHeldKeys();
+      }
       // Every new game (any phase → "playing") restarts the loop from the beginning
       if (gs.phase === "playing" && prevPhase !== "playing") {
         if (gestureMusicStartRef.current) {
@@ -2654,13 +2662,28 @@ export default function OpPotatoGame() {
   // Tilt control
   useEffect(() => {
     const handleOrientation = (e: DeviceOrientationEvent) => {
-      if (stateRef.current.controlMode !== "tilt") return;
+      if (stateRef.current.controlMode !== "tilt") {
+        return;
+      }
       const gamma = e.gamma ?? 0; // -90 to 90
       tiltRef.current = Math.max(-1, Math.min(1, gamma / 30));
     };
     window.addEventListener("deviceorientation", handleOrientation);
     return () => window.removeEventListener("deviceorientation", handleOrientation);
   }, []);
+
+  useEffect(() => {
+    const handleWindowBlur = () => clearHeldKeys();
+    const handleVisibilityChange = () => {
+      if (document.hidden) clearHeldKeys();
+    };
+    window.addEventListener("blur", handleWindowBlur);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("blur", handleWindowBlur);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [clearHeldKeys]);
 
   const initializeTapMode = useCallback(() => {
     stateRef.current.controlMode = "tap";
@@ -2758,6 +2781,7 @@ export default function OpPotatoGame() {
       if (x >= DEAD_REPLAY_BTN.x && x <= DEAD_REPLAY_BTN.x + DEAD_REPLAY_BTN.w &&
           y >= DEAD_REPLAY_BTN.y && y <= DEAD_REPLAY_BTN.y + DEAD_REPLAY_BTN.h) {
         const best = gs.bestScore;
+        clearHeldKeys();
         Object.assign(stateRef.current, makeInitialState(best));
         stateRef.current.bestScore = best;
         startAudioFromGesture();
@@ -2785,6 +2809,7 @@ export default function OpPotatoGame() {
       if (x >= WIN_REPLAY_BTN.x && x <= WIN_REPLAY_BTN.x + WIN_REPLAY_BTN.w &&
           y >= WIN_REPLAY_BTN.y && y <= WIN_REPLAY_BTN.y + WIN_REPLAY_BTN.h) {
         const best = gs.bestScore;
+        clearHeldKeys();
         Object.assign(stateRef.current, makeInitialState(best));
         stateRef.current.bestScore = best;
         startAudioFromGesture();
@@ -2806,6 +2831,7 @@ export default function OpPotatoGame() {
       if (x >= LB_PLAY_BTN.x && x <= LB_PLAY_BTN.x + LB_PLAY_BTN.w &&
           y >= LB_PLAY_BTN.y && y <= LB_PLAY_BTN.y + LB_PLAY_BTN.h) {
         const best = gs.bestScore;
+        clearHeldKeys();
         Object.assign(stateRef.current, makeInitialState(best));
         stateRef.current.bestScore = best;
         startAudioFromGesture();
@@ -2817,6 +2843,7 @@ export default function OpPotatoGame() {
     // Playing: tap direction (works as a fallback even in tilt mode)
     if (gs.phase === "playing") {
       tapDirRef.current = x < CANVAS_W / 2 ? -1 : 1;
+      return;
     }
   }, [fetchLeaderboard, startAudioFromGesture]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2826,43 +2853,43 @@ export default function OpPotatoGame() {
 
   // Keyboard (desktop fallback)
   useEffect(() => {
-    const keys = new Set<string>();
-    const onKey = (e: KeyboardEvent) => {
-      // Don't hijack typing in the name-submission input (or any other input field)
-      const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      if (e.key === "ArrowLeft") leftHeldRef.current = true;
+      else rightHeldRef.current = true;
 
-      if (e.type === "keydown") keys.add(e.key);
-      else keys.delete(e.key);
-      const left = keys.has("ArrowLeft") || keys.has("a") || keys.has("A");
-      const right = keys.has("ArrowRight") || keys.has("d") || keys.has("D");
-      tapDirRef.current = left ? -1 : right ? 1 : 0;
-
-      // Any key = start/restart
-      if (e.type === "keydown") {
-        const gs = stateRef.current;
-        if (gs.showSettings || showSplash || showHelp || showNameInput) return;
-        if (gs.phase === "menu") {
-          if (gs.controlMode === "tap") initializeTapMode();
-          gs.phase = "playing";
-          return;
-        }
-        if (gs.phase === "dead" || gs.phase === "won") {
-          if (gs.controlMode === "tap") initializeTapMode();
-          const best = gs.bestScore;
-          Object.assign(stateRef.current, makeInitialState(best));
-          stateRef.current.bestScore = best;
-          stateRef.current.phase = "playing";
-        }
+      const gs = stateRef.current;
+      if (gs.showSettings || showSplash || showHelp || showNameInput) {
+        return;
+      }
+      if (gs.phase === "menu") {
+        if (gs.controlMode === "tap") initializeTapMode();
+        gs.phase = "playing";
+        return;
+      }
+      if (gs.phase === "dead" || gs.phase === "won") {
+        if (gs.controlMode === "tap") initializeTapMode();
+        const best = gs.bestScore;
+        clearHeldKeys();
+        Object.assign(stateRef.current, makeInitialState(best));
+        stateRef.current.bestScore = best;
+        stateRef.current.phase = "playing";
       }
     };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("keyup", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("keyup", onKey);
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      if (e.key === "ArrowLeft") leftHeldRef.current = false;
+      else rightHeldRef.current = false;
     };
-  }, [showSplash, showHelp, showNameInput, initializeTapMode]);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [showSplash, showHelp, showNameInput, initializeTapMode, clearHeldKeys]);
 
   return (
     <div
@@ -2878,10 +2905,7 @@ export default function OpPotatoGame() {
         ref={canvasRef}
         tabIndex={-1}
         style={{ display: "block", touchAction: "none", userSelect: "none" }}
-        onPointerDown={(e) => {
-          e.currentTarget.setPointerCapture(e.pointerId);
-          handlePointerDown(e.clientX, e.clientY);
-        }}
+        onPointerDown={(e) => handlePointerDown(e.clientX, e.clientY)}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       />
