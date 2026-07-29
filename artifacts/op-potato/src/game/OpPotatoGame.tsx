@@ -1709,7 +1709,7 @@ function LeaderboardOverlay({
       flexDirection: "column",
       overflow: "hidden",
       padding: "20px calc(20px + env(safe-area-inset-right, 0px)) 18px calc(20px + env(safe-area-inset-left, 0px))",
-      background: "radial-gradient(circle at 50% 6%, rgba(255,215,0,0.18), transparent 170px), rgba(10,5,30,0.96)",
+      background: "#0a051e",
       color: "#fff",
       fontFamily: "'Fredoka One', cursive",
       pointerEvents: "auto",
@@ -2631,6 +2631,20 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     }
 
     // ── Draw ──
+    if (gs.phase === "leaderboard") {
+      // Cover the physical canvas before the DOM leaderboard content is
+      // composited. Resetting the transform makes this an exact full-bitmap
+      // fill, independent of game scale, crop, or device pixel ratio.
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = "#0a051e";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      rafRef.current = requestAnimationFrame(render);
+      return;
+    }
+
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.save();
     ctx.beginPath();
@@ -2714,7 +2728,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     }
 
     // Settings button
-    if (!gs.showSettings && gs.phase !== "winning" && gs.phase !== "won" && gs.phase !== "leaderboard") {
+    if (!gs.showSettings && gs.phase !== "winning" && gs.phase !== "won") {
       drawSettingsButton(ctx, safeAreaRef.current);
     }
 
@@ -2728,9 +2742,6 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       drawConfetti(ctx, gs.confetti);
       drawWinScreen(ctx, gs.score, gs.bestScore, gs.winAnim, t, gs.wonAsFry);
     }
-
-    // The leaderboard is a DOM flex overlay. Do not also paint the legacy
-    // canvas leaderboard underneath it.
 
     // Settings panel
     if (gs.showSettings) {
