@@ -1553,9 +1553,6 @@ const DEAD_REPLAY_BTN  = { x: DEAD_PX + 60, y: DEAD_PY + 254, w: 180, h: 38 };
 // Menu leaderboard button
 const MENU_LB_BTN = { x: CANVAS_W / 2 - 100, y: 648, w: 200, h: 44 };
 
-// Leaderboard screen "Play Again" button
-const LB_PLAY_BTN = { x: CANVAS_W / 2 - 100, y: CANVAS_H - 88, w: 200, h: 50 };
-
 // Settings panel
 const SET_PW = 300;
 const SET_PH = 280;
@@ -1798,119 +1795,6 @@ function LeaderboardOverlay({
       </button>
     </div>
   );
-}
-
-function drawLeaderboard(
-  ctx: CanvasRenderingContext2D,
-  entries: LeaderboardEntry[],
-  loading: boolean,
-  t: number,
-  safeArea: SafeAreaInsets
-) {
-  const topOffset = safeArea.top;
-  const contentLeft = safeArea.left + 14;
-  const contentRight = CANVAS_W - safeArea.right - 14;
-  const contentWidth = Math.max(240, contentRight - contentLeft);
-
-  // Background
-  ctx.fillStyle = "rgba(10,5,30,0.96)";
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-  // Header glow
-  const glowY = 80 + topOffset;
-  const glow = ctx.createRadialGradient(CANVAS_W / 2, glowY, 10, CANVAS_W / 2, glowY, 160);
-  glow.addColorStop(0, "rgba(255,215,0,0.22)");
-  glow.addColorStop(1, "rgba(255,150,0,0)");
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, CANVAS_W, 200);
-
-  // Title
-  ctx.textAlign = "center";
-  ctx.font = "bold 36px 'Fredoka One', cursive";
-  ctx.fillStyle = "#FFD700";
-  ctx.shadowColor = "#FF8C00"; ctx.shadowBlur = 18;
-  ctx.fillText("🏆 TOP 10", CANVAS_W / 2, 60 + topOffset);
-  ctx.shadowBlur = 0;
-  ctx.font = "13px 'Fredoka One', cursive";
-  ctx.fillStyle = "rgba(255,255,255,0.5)";
-  ctx.fillText("Global Leaderboard", CANVAS_W / 2, 84 + topOffset);
-
-  if (loading) {
-    ctx.fillStyle = "rgba(255,255,255,0.7)";
-    ctx.font = "18px 'Fredoka One', cursive";
-    const dots = ".".repeat(1 + (Math.floor(t / 400) % 3));
-    ctx.fillText(`Loading${dots}`, CANVAS_W / 2, 380);
-  } else if (entries.length === 0) {
-    ctx.fillStyle = "rgba(255,255,255,0.55)";
-    ctx.font = "18px 'Fredoka One', cursive";
-    ctx.fillText("No scores yet — be the first!", CANVAS_W / 2, 380);
-  } else {
-    const rowH = 46;
-    const startY = 108 + topOffset;
-    for (let i = 0; i < entries.length; i++) {
-      const e = entries[i];
-      const ry = startY + i * rowH;
-
-      // Row background
-      const isTop3 = i < 3;
-      ctx.fillStyle = isTop3
-        ? `rgba(255,215,0,${0.08 - i * 0.02})`
-        : "rgba(255,255,255,0.04)";
-      drawRoundRect(ctx, contentLeft, ry, contentWidth, rowH - 4, 10);
-      ctx.fill();
-
-      // Rank medal
-      ctx.font = "bold 18px 'Fredoka One', cursive";
-      const medals = ["🥇", "🥈", "🥉"];
-      const rankStr = i < 3 ? medals[i] : `#${i + 1}`;
-      ctx.fillStyle = i < 3 ? "#FFD700" : "rgba(255,255,255,0.55)";
-      ctx.textAlign = "left";
-      ctx.font = i < 3 ? "18px 'Fredoka One', cursive" : "bold 14px 'Fredoka One', cursive";
-      const rankX = contentLeft + 12;
-      const nameX = contentLeft + 58;
-      const scoreRight = contentRight - 8;
-      const stageX = scoreRight - 66;
-      ctx.fillText(rankStr, rankX, ry + 28);
-
-      // Name
-      ctx.textAlign = "left";
-      ctx.font = `bold 15px 'Fredoka One', cursive`;
-      ctx.fillStyle = i < 3 ? "#fff" : "rgba(255,255,255,0.85)";
-      const availableNameWidth = Math.max(36, stageX - nameX - 24);
-      let displayName = e.playerName.slice(0, 12);
-      while (displayName.length > 1 && ctx.measureText(displayName).width > availableNameWidth) {
-        displayName = `${displayName.slice(0, -2)}…`;
-      }
-      ctx.fillText(displayName, nameX, ry + 28);
-
-      // Stage emoji
-      ctx.font = "16px 'Fredoka One', cursive";
-      ctx.textAlign = "right";
-      ctx.fillText(STAGE_EMOJIS[Math.min(e.stageReached, 4)], stageX, ry + 28);
-
-      // Score
-      let scoreFontSize = i < 3 ? 16 : 14;
-      const scoreText = e.score.toLocaleString();
-      ctx.font = `bold ${scoreFontSize}px 'Fredoka One', cursive`;
-      while (scoreFontSize > 10 && ctx.measureText(scoreText).width > 60) {
-        scoreFontSize -= 1;
-        ctx.font = `bold ${scoreFontSize}px 'Fredoka One', cursive`;
-      }
-      ctx.fillStyle = i === 0 ? "#FFD700" : i === 1 ? "#C0C0C0" : i === 2 ? "#CD7F32" : "rgba(255,255,255,0.75)";
-      ctx.fillText(scoreText, scoreRight, ry + 28);
-    }
-  }
-
-  // Play Again button
-  ctx.shadowColor = "#FFD700"; ctx.shadowBlur = 10;
-  ctx.fillStyle = "#FFD700";
-  drawRoundRect(ctx, LB_PLAY_BTN.x, LB_PLAY_BTN.y, LB_PLAY_BTN.w, LB_PLAY_BTN.h, 14);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = "#1a0a00";
-  ctx.font = "bold 17px 'Fredoka One', cursive";
-  ctx.textAlign = "center";
-  ctx.fillText("Play Again", CANVAS_W / 2, LB_PLAY_BTN.y + 33);
 }
 
 // ─── GAME LOGIC ───────────────────────────────────────────────────────────────
@@ -2286,8 +2170,6 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
-  const leaderboardRef = useRef<LeaderboardEntry[]>([]);
-  const leaderboardLoadingRef = useRef(false);
   const pendingScoreRef = useRef({ score: 0, stageReached: 0 });
   const spritesRef = useRef<SpriteMap | null>(null);
   const soundsRef = useRef<{
@@ -2522,7 +2404,6 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   }, []);
 
   const fetchLeaderboard = useCallback(async () => {
-    leaderboardLoadingRef.current = true;
     setLeaderboardLoading(true);
     const requestUrl = `${API_BASE}/api/leaderboard`;
     try {
@@ -2530,13 +2411,10 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       const responseBody = await res.text();
       if (!res.ok) throw new Error(`Leaderboard GET failed with status ${res.status}`);
       const entries: LeaderboardEntry[] = JSON.parse(responseBody);
-      leaderboardRef.current = entries;
       setLeaderboardEntries(entries);
     } catch {
-      leaderboardRef.current = [];
       setLeaderboardEntries([]);
     }
-    leaderboardLoadingRef.current = false;
     setLeaderboardLoading(false);
   }, []);
 
@@ -2851,10 +2729,8 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       drawWinScreen(ctx, gs.score, gs.bestScore, gs.winAnim, t, gs.wonAsFry);
     }
 
-    // Leaderboard screen
-    if (gs.phase === "leaderboard") {
-      drawLeaderboard(ctx, leaderboardRef.current, leaderboardLoadingRef.current, t, safeAreaRef.current);
-    }
+    // The leaderboard is a DOM flex overlay. Do not also paint the legacy
+    // canvas leaderboard underneath it.
 
     // Settings panel
     if (gs.showSettings) {
@@ -3027,21 +2903,8 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       return;
     }
 
-    // Leaderboard screen: Play Again button
-    if (gs.phase === "leaderboard") {
-      if (x >= LB_PLAY_BTN.x && x <= LB_PLAY_BTN.x + LB_PLAY_BTN.w &&
-          y >= LB_PLAY_BTN.y && y <= LB_PLAY_BTN.y + LB_PLAY_BTN.h) {
-        if (!assetsReady) return;
-        const best = gs.bestScore;
-        clearHeldKeys();
-        Object.assign(stateRef.current, makeInitialState(best));
-        stateRef.current.bestScore = best;
-        startAudioFromGesture();
-        stateRef.current.phase = "playing";
-        setShowLeaderboard(false);
-      }
-      return;
-    }
+    // Leaderboard input is handled by the DOM overlay.
+    if (gs.phase === "leaderboard") return;
 
     // Playing: hold the left or right side to steer.
     if (gs.phase === "playing") {
