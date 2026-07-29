@@ -78,6 +78,7 @@ interface SafeAreaInsets {
 
 interface LeaderboardEntry {
   id: number;
+  submissionId: string;
   playerName: string;
   score: number;
   stageReached: number;
@@ -2424,19 +2425,12 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   const fetchLeaderboard = useCallback(async () => {
     leaderboardLoadingRef.current = true;
     const requestUrl = `${API_BASE}/api/leaderboard`;
-    console.log("[LEADERBOARD] GET request", { url: requestUrl });
     try {
       const res = await fetch(requestUrl);
       const responseBody = await res.text();
-      console.log("[LEADERBOARD] GET response", {
-        url: requestUrl,
-        status: res.status,
-        body: responseBody,
-      });
       if (!res.ok) throw new Error(`Leaderboard GET failed with status ${res.status}`);
       leaderboardRef.current = JSON.parse(responseBody);
-    } catch (error) {
-      console.error("[LEADERBOARD] GET exception", { url: requestUrl, error });
+    } catch {
       leaderboardRef.current = [];
     }
     leaderboardLoadingRef.current = false;
@@ -2448,9 +2442,10 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     setSubmitting(true);
     setSubmitError("");
     const requestUrl = `${API_BASE}/api/leaderboard`;
-    console.log("[LEADERBOARD] POST request", { url: requestUrl });
+    const submissionId = crypto.randomUUID();
     try {
       const requestBody = JSON.stringify({
+        submissionId,
         playerName: trimmed,
         score: pendingScoreRef.current.score,
         stageReached: pendingScoreRef.current.stageReached,
@@ -2461,36 +2456,43 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
         body: requestBody,
       });
 
-      let res = await sendRequest();
-      let responseBody = await res.text();
-      console.log("[LEADERBOARD] POST response", {
-        url: requestUrl,
-        status: res.status,
-        body: responseBody,
-      });
+      const retryableStatuses = new Set([500, 502, 503, 504]);
+      const retryDelays = [0, 2000, 4000];
+      let submitted = false;
+      let lastError: unknown = new Error("Leaderboard submission failed");
 
-      if (res.status >= 500) {
-        console.warn("[LEADERBOARD] POST retrying after server error", {
-          url: requestUrl,
-          status: res.status,
-        });
-        await new Promise((resolve) => window.setTimeout(resolve, 1500));
-        res = await sendRequest();
-        responseBody = await res.text();
-        console.log("[LEADERBOARD] POST retry response", {
-          url: requestUrl,
-          status: res.status,
-          body: responseBody,
-        });
+      for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+        const delay = retryDelays[attempt];
+        if (delay > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, delay));
+        }
+
+        let res: Response;
+        try {
+          res = await sendRequest();
+        } catch (error) {
+          lastError = error;
+          if (attempt + 1 === retryDelays.length) throw error;
+          continue;
+        }
+
+        if (res.ok) {
+          submitted = true;
+          break;
+        }
+
+        lastError = new Error(`Leaderboard POST failed with status ${res.status}`);
+        if (!retryableStatuses.has(res.status) || attempt + 1 === retryDelays.length) {
+          throw lastError;
+        }
       }
 
-      if (!res.ok) throw new Error(`Leaderboard POST failed with status ${res.status}`);
+      if (!submitted) throw lastError;
       await fetchLeaderboard();
       setShowNameInput(false);
       setNameValue("");
       stateRef.current.phase = "leaderboard";
-    } catch (error) {
-      console.error("[LEADERBOARD] POST exception", { url: requestUrl, error });
+    } catch {
       setSubmitError("Failed to submit. Try again.");
     }
     setSubmitting(false);

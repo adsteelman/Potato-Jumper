@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, leaderboardTable, insertLeaderboardSchema } from "@workspace/db";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 const router = Router();
 
@@ -25,7 +25,7 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  const { playerName, score, stageReached } = parsed.data;
+  const { submissionId, playerName, score, stageReached } = parsed.data;
   const trimmed = playerName.trim().slice(0, 12);
   if (!trimmed) {
     res.status(400).json({ error: "Name is required" });
@@ -35,9 +35,23 @@ router.post("/", async (req, res) => {
   try {
     const [entry] = await db
       .insert(leaderboardTable)
-      .values({ playerName: trimmed, score, stageReached })
+      .values({ submissionId, playerName: trimmed, score, stageReached })
+      .onConflictDoNothing({ target: leaderboardTable.submissionId })
       .returning();
-    res.status(201).json(entry);
+    if (entry) {
+      res.status(201).json(entry);
+      return;
+    }
+
+    const [existingEntry] = await db
+      .select()
+      .from(leaderboardTable)
+      .where(eq(leaderboardTable.submissionId, submissionId))
+      .limit(1);
+    if (!existingEntry) {
+      throw new Error("Idempotent leaderboard submission was not found after conflict");
+    }
+    res.status(200).json(existingEntry);
   } catch (err) {
     req.log.error({ err }, "Failed to submit score");
     res.status(500).json({ error: "Failed to submit score" });

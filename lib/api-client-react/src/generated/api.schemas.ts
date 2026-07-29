@@ -11,6 +11,7 @@ export interface HealthStatus {
 
 export interface LeaderboardEntry {
   id: number;
+  submissionId: string;
   playerName: string;
   score: number;
   stageReached: number;
@@ -18,6 +19,7 @@ export interface LeaderboardEntry {
 }
 
 export interface ScoreInput {
+  submissionId: string;
   /**
      * @minLength 1
      * @maxLength 12

@@ -8,6 +8,7 @@
 
 export interface LeaderboardEntry {
   id: number;
+  submissionId: string;
   playerName: string;
   score: number;
   stageReached: number;

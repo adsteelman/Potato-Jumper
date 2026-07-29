@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 export interface ScoreInput {
+    submissionId: string;
     /**
        * @minLength 1
        * @maxLength 12

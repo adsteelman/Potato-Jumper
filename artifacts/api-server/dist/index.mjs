@@ -37556,6 +37556,7 @@ var HealthCheckResponse = objectType({
 });
 var GetLeaderboardResponseItem = objectType({
   "id": numberType(),
+  "submissionId": stringType().uuid(),
   "playerName": stringType(),
   "score": numberType(),
   "stageReached": numberType(),
@@ -37567,9 +37568,18 @@ var submitScoreBodyScoreMin = 0;
 var submitScoreBodyStageReachedMin = 0;
 var submitScoreBodyStageReachedMax = 4;
 var SubmitScoreBody = objectType({
+  "submissionId": stringType().uuid(),
   "playerName": stringType().min(1).max(submitScoreBodyPlayerNameMax),
   "score": numberType().min(submitScoreBodyScoreMin),
   "stageReached": numberType().min(submitScoreBodyStageReachedMin).max(submitScoreBodyStageReachedMax)
+});
+var SubmitScoreResponse = objectType({
+  "id": numberType(),
+  "submissionId": stringType().uuid(),
+  "playerName": stringType(),
+  "score": numberType(),
+  "stageReached": numberType(),
+  "createdAt": stringType()
 });
 
 // src/routes/health.ts
@@ -55947,6 +55957,7 @@ var createInsertSchema = (entity, refine2) => {
 // ../../lib/db/src/schema/leaderboard.ts
 var leaderboardTable = pgTable("leaderboard", {
   id: serial("id").primaryKey(),
+  submissionId: uuid("submission_id").notNull().defaultRandom().unique(),
   playerName: text("player_name").notNull(),
   score: integer("score").notNull(),
   stageReached: integer("stage_reached").notNull().default(0),
@@ -55955,6 +55966,8 @@ var leaderboardTable = pgTable("leaderboard", {
 var insertLeaderboardSchema = createInsertSchema(leaderboardTable).omit({
   id: true,
   createdAt: true
+}).extend({
+  submissionId: external_exports.uuid()
 });
 
 // ../../lib/db/src/index.ts
@@ -55984,15 +55997,23 @@ router2.post("/", async (req, res) => {
     res.status(400).json({ error: "Invalid input" });
     return;
   }
-  const { playerName, score, stageReached } = parsed.data;
+  const { submissionId, playerName, score, stageReached } = parsed.data;
   const trimmed = playerName.trim().slice(0, 12);
   if (!trimmed) {
     res.status(400).json({ error: "Name is required" });
     return;
   }
   try {
-    const [entry] = await db.insert(leaderboardTable).values({ playerName: trimmed, score, stageReached }).returning();
-    res.status(201).json(entry);
+    const [entry] = await db.insert(leaderboardTable).values({ submissionId, playerName: trimmed, score, stageReached }).onConflictDoNothing({ target: leaderboardTable.submissionId }).returning();
+    if (entry) {
+      res.status(201).json(entry);
+      return;
+    }
+    const [existingEntry] = await db.select().from(leaderboardTable).where(eq(leaderboardTable.submissionId, submissionId)).limit(1);
+    if (!existingEntry) {
+      throw new Error("Idempotent leaderboard submission was not found after conflict");
+    }
+    res.status(200).json(existingEntry);
   } catch (err) {
     req.log.error({ err }, "Failed to submit score");
     res.status(500).json({ error: "Failed to submit score" });

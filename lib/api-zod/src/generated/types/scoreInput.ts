@@ -7,6 +7,7 @@
  */
 
 export interface ScoreInput {
+  submissionId: string;
   /**
      * @minLength 1
      * @maxLength 12

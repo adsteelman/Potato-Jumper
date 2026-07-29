@@ -20,6 +20,23 @@ export declare const leaderboardTable: import("drizzle-orm/pg-core").PgTableWith
             identity: undefined;
             generated: undefined;
         }, {}, {}>;
+        submissionId: import("drizzle-orm/pg-core").PgColumn<{
+            name: "submission_id";
+            tableName: "leaderboard";
+            dataType: "string";
+            columnType: "PgUUID";
+            data: string;
+            driverParam: string;
+            notNull: true;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
         playerName: import("drizzle-orm/pg-core").PgColumn<{
             name: "player_name";
             tableName: "leaderboard";
@@ -95,6 +112,7 @@ export declare const insertLeaderboardSchema: z.ZodObject<{
     playerName: z.ZodString;
     score: z.ZodInt;
     stageReached: z.ZodOptional<z.ZodInt>;
+    submissionId: z.ZodUUID;
 }, {
     out: {};
     in: {};

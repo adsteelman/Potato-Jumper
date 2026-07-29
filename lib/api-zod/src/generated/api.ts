@@ -22,6 +22,7 @@ export const HealthCheckResponse = zod.object({
  */
 export const GetLeaderboardResponseItem = zod.object({
   "id": zod.number(),
+  "submissionId": zod.string().uuid(),
   "playerName": zod.string(),
   "score": zod.number(),
   "stageReached": zod.number(),
@@ -43,9 +44,19 @@ export const submitScoreBodyStageReachedMax = 4;
 
 
 export const SubmitScoreBody = zod.object({
+  "submissionId": zod.string().uuid(),
   "playerName": zod.string().min(1).max(submitScoreBodyPlayerNameMax),
   "score": zod.number().min(submitScoreBodyScoreMin),
   "stageReached": zod.number().min(submitScoreBodyStageReachedMin).max(submitScoreBodyStageReachedMax)
+})
+
+export const SubmitScoreResponse = zod.object({
+  "id": zod.number(),
+  "submissionId": zod.string().uuid(),
+  "playerName": zod.string(),
+  "score": zod.number(),
+  "stageReached": zod.number(),
+  "createdAt": zod.string()
 })
 
 

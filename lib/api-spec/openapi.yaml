@@ -51,6 +51,12 @@ paths:
             schema:
               $ref: "#/components/schemas/ScoreInput"
       responses:
+        "200":
+          description: Existing score returned for an idempotent retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardEntry"
         "201":
           description: Score submitted
           content:
@@ -74,10 +80,13 @@ components:
         - status
     LeaderboardEntry:
       type: object
-      required: [id, playerName, score, stageReached, createdAt]
+      required: [id, submissionId, playerName, score, stageReached, createdAt]
       properties:
         id:
           type: integer
+        submissionId:
+          type: string
+          format: uuid
         playerName:
           type: string
         score:
@@ -88,8 +97,11 @@ components:
           type: string
     ScoreInput:
       type: object
-      required: [playerName, score, stageReached]
+      required: [submissionId, playerName, score, stageReached]
       properties:
+        submissionId:
+          type: string
+          format: uuid
         playerName:
           type: string
           minLength: 1

@@ -1,9 +1,10 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 export const leaderboardTable = pgTable("leaderboard", {
   id: serial("id").primaryKey(),
+  submissionId: uuid("submission_id").notNull().defaultRandom().unique(),
   playerName: text("player_name").notNull(),
   score: integer("score").notNull(),
   stageReached: integer("stage_reached").notNull().default(0),
@@ -13,6 +14,8 @@ export const leaderboardTable = pgTable("leaderboard", {
 export const insertLeaderboardSchema = createInsertSchema(leaderboardTable).omit({
   id: true,
   createdAt: true,
+}).extend({
+  submissionId: z.uuid(),
 });
 export type InsertLeaderboard = z.infer<typeof insertLeaderboardSchema>;
 export type Leaderboard = typeof leaderboardTable.$inferSelect;

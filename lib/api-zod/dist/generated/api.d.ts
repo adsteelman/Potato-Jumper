@@ -22,18 +22,21 @@ export declare const HealthCheckResponse: zod.ZodObject<{
  */
 export declare const GetLeaderboardResponseItem: zod.ZodObject<{
     id: zod.ZodNumber;
+    submissionId: zod.ZodString;
     playerName: zod.ZodString;
     score: zod.ZodNumber;
     stageReached: zod.ZodNumber;
     createdAt: zod.ZodString;
 }, "strip", zod.ZodTypeAny, {
     id: number;
+    submissionId: string;
     playerName: string;
     score: number;
     stageReached: number;
     createdAt: string;
 }, {
     id: number;
+    submissionId: string;
     playerName: string;
     score: number;
     stageReached: number;
@@ -41,18 +44,21 @@ export declare const GetLeaderboardResponseItem: zod.ZodObject<{
 }>;
 export declare const GetLeaderboardResponse: zod.ZodArray<zod.ZodObject<{
     id: zod.ZodNumber;
+    submissionId: zod.ZodString;
     playerName: zod.ZodString;
     score: zod.ZodNumber;
     stageReached: zod.ZodNumber;
     createdAt: zod.ZodString;
 }, "strip", zod.ZodTypeAny, {
     id: number;
+    submissionId: string;
     playerName: string;
     score: number;
     stageReached: number;
     createdAt: string;
 }, {
     id: number;
+    submissionId: string;
     playerName: string;
     score: number;
     stageReached: number;
@@ -66,16 +72,41 @@ export declare const submitScoreBodyScoreMin = 0;
 export declare const submitScoreBodyStageReachedMin = 0;
 export declare const submitScoreBodyStageReachedMax = 4;
 export declare const SubmitScoreBody: zod.ZodObject<{
+    submissionId: zod.ZodString;
     playerName: zod.ZodString;
     score: zod.ZodNumber;
     stageReached: zod.ZodNumber;
 }, "strip", zod.ZodTypeAny, {
+    submissionId: string;
     playerName: string;
     score: number;
     stageReached: number;
 }, {
+    submissionId: string;
     playerName: string;
     score: number;
     stageReached: number;
+}>;
+export declare const SubmitScoreResponse: zod.ZodObject<{
+    id: zod.ZodNumber;
+    submissionId: zod.ZodString;
+    playerName: zod.ZodString;
+    score: zod.ZodNumber;
+    stageReached: zod.ZodNumber;
+    createdAt: zod.ZodString;
+}, "strip", zod.ZodTypeAny, {
+    id: number;
+    submissionId: string;
+    playerName: string;
+    score: number;
+    stageReached: number;
+    createdAt: string;
+}, {
+    id: number;
+    submissionId: string;
+    playerName: string;
+    score: number;
+    stageReached: number;
+    createdAt: string;
 }>;
 //# sourceMappingURL=api.d.ts.map

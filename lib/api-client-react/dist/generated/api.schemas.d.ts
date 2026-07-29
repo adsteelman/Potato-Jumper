@@ -10,12 +10,14 @@ export interface HealthStatus {
 }
 export interface LeaderboardEntry {
     id: number;
+    submissionId: string;
     playerName: string;
     score: number;
     stageReached: number;
     createdAt: string;
 }
 export interface ScoreInput {
+    submissionId: string;
     /**
        * @minLength 1
        * @maxLength 12
