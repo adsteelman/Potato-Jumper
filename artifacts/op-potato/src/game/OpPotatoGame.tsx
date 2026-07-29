@@ -1687,6 +1687,119 @@ function drawWinScreen(ctx: CanvasRenderingContext2D, score: number, bestScore: 
 
 const STAGE_EMOJIS = ["🥔", "✨", "💪", "🔥", "👑"];
 
+function LeaderboardOverlay({
+  entries,
+  loading,
+  adBannerH,
+  onPlayAgain,
+}: {
+  entries: LeaderboardEntry[];
+  loading: boolean;
+  adBannerH: number | string;
+  onPlayAgain: () => void;
+}) {
+  const medals = ["🥇", "🥈", "🥉"];
+
+  return (
+    <div style={{
+      position: "absolute",
+      top: "env(safe-area-inset-top, 0px)",
+      right: 0,
+      bottom: adBannerH,
+      left: 0,
+      zIndex: 20,
+      display: "flex",
+      flexDirection: "column",
+      overflow: "hidden",
+      padding: "20px calc(20px + env(safe-area-inset-right, 0px)) 18px calc(20px + env(safe-area-inset-left, 0px))",
+      background: "radial-gradient(circle at 50% 6%, rgba(255,215,0,0.18), transparent 170px), rgba(10,5,30,0.96)",
+      color: "#fff",
+      fontFamily: "'Fredoka One', cursive",
+      pointerEvents: "auto",
+    }}>
+      <div style={{ flexShrink: 0, textAlign: "center", marginBottom: 16 }}>
+        <div style={{ color: "#FFD700", fontSize: 36, fontWeight: "bold", textShadow: "0 0 18px #FF8C00" }}>
+          🏆 TOP 10
+        </div>
+        <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 13 }}>Global Leaderboard</div>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0 }}>
+        {loading ? (
+          <div style={{ marginTop: 230, textAlign: "center", color: "rgba(255,255,255,0.7)", fontSize: 18 }}>Loading…</div>
+        ) : entries.length === 0 ? (
+          <div style={{ marginTop: 230, textAlign: "center", color: "rgba(255,255,255,0.55)", fontSize: 18 }}>
+            No scores yet — be the first!
+          </div>
+        ) : entries.slice(0, 10).map((entry, index) => (
+          <div key={`${entry.playerName}-${entry.score}-${index}`} style={{
+            display: "flex",
+            alignItems: "center",
+            width: "100%",
+            minWidth: 0,
+            height: 42,
+            marginBottom: 4,
+            padding: "0 12px",
+            borderRadius: 10,
+            background: index < 3
+              ? `rgba(255,215,0,${0.08 - index * 0.02})`
+              : "rgba(255,255,255,0.04)",
+          }}>
+            <div style={{ flex: "0 0 46px", fontSize: index < 3 ? 18 : 14, fontWeight: "bold", color: index < 3 ? "#FFD700" : "rgba(255,255,255,0.55)" }}>
+              {index < 3 ? medals[index] : `#${index + 1}`}
+            </div>
+            <div style={{
+              flex: "1 1 auto",
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              fontSize: 15,
+              fontWeight: "bold",
+              color: index < 3 ? "#fff" : "rgba(255,255,255,0.85)",
+            }}>
+              {entry.playerName.slice(0, 12)}
+            </div>
+            <div style={{ flex: "0 0 32px", textAlign: "center", fontSize: 16 }}>
+              {STAGE_EMOJIS[Math.min(entry.stageReached, 4)]}
+            </div>
+            <div style={{
+              flex: "0 0 auto",
+              minWidth: 64,
+              paddingLeft: 6,
+              textAlign: "right",
+              whiteSpace: "nowrap",
+              fontSize: index < 3 ? 16 : 14,
+              fontWeight: "bold",
+              fontVariantNumeric: "tabular-nums",
+              color: index === 0 ? "#FFD700" : index === 1 ? "#C0C0C0" : index === 2 ? "#CD7F32" : "rgba(255,255,255,0.75)",
+            }}>
+              {entry.score.toLocaleString()}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button onPointerDown={(event) => { event.stopPropagation(); onPlayAgain(); }} style={{
+        flexShrink: 0,
+        alignSelf: "center",
+        width: 200,
+        height: 50,
+        marginTop: 16,
+        border: 0,
+        borderRadius: 14,
+        background: "#FFD700",
+        boxShadow: "0 0 10px #FFD700",
+        color: "#1a0a00",
+        font: "bold 17px 'Fredoka One', cursive",
+        touchAction: "manipulation",
+      }}>
+        Play Again
+      </button>
+    </div>
+  );
+}
+
 function drawLeaderboard(
   ctx: CanvasRenderingContext2D,
   entries: LeaderboardEntry[],
@@ -2170,6 +2283,9 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   const [nameValue, setNameValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const leaderboardRef = useRef<LeaderboardEntry[]>([]);
   const leaderboardLoadingRef = useRef(false);
   const pendingScoreRef = useRef({ score: 0, stageReached: 0 });
@@ -2407,16 +2523,21 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
 
   const fetchLeaderboard = useCallback(async () => {
     leaderboardLoadingRef.current = true;
+    setLeaderboardLoading(true);
     const requestUrl = `${API_BASE}/api/leaderboard`;
     try {
       const res = await fetch(requestUrl);
       const responseBody = await res.text();
       if (!res.ok) throw new Error(`Leaderboard GET failed with status ${res.status}`);
-      leaderboardRef.current = JSON.parse(responseBody);
+      const entries: LeaderboardEntry[] = JSON.parse(responseBody);
+      leaderboardRef.current = entries;
+      setLeaderboardEntries(entries);
     } catch {
       leaderboardRef.current = [];
+      setLeaderboardEntries([]);
     }
     leaderboardLoadingRef.current = false;
+    setLeaderboardLoading(false);
   }, []);
 
   const submitScore = useCallback(async (name: string) => {
@@ -2475,6 +2596,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       setShowNameInput(false);
       setNameValue("");
       stateRef.current.phase = "leaderboard";
+      setShowLeaderboard(true);
     } catch {
       setSubmitError("Failed to submit. Try again.");
     }
@@ -2837,6 +2959,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
           y >= MENU_LB_BTN.y && y <= MENU_LB_BTN.y + MENU_LB_BTN.h) {
         fetchLeaderboard();
         gs.phase = "leaderboard";
+        setShowLeaderboard(true);
         return;
       }
       if (!assetsReady) return;
@@ -2915,6 +3038,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
         stateRef.current.bestScore = best;
         startAudioFromGesture();
         stateRef.current.phase = "playing";
+        setShowLeaderboard(false);
       }
       return;
     }
@@ -3017,6 +3141,24 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
             background: "#111",
             zIndex: 30,
             display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        />
+      )}
+
+      {showLeaderboard && (
+        <LeaderboardOverlay
+          entries={leaderboardEntries}
+          loading={leaderboardLoading}
+          adBannerH={AD_BANNER_H}
+          onPlayAgain={() => {
+            if (!assetsReady) return;
+            const best = stateRef.current.bestScore;
+            clearHeldKeys();
+            Object.assign(stateRef.current, makeInitialState(best));
+            stateRef.current.bestScore = best;
+            startAudioFromGesture();
+            stateRef.current.phase = "playing";
+            setShowLeaderboard(false);
           }}
         />
       )}
