@@ -2423,10 +2423,22 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
 
   const fetchLeaderboard = useCallback(async () => {
     leaderboardLoadingRef.current = true;
+    const requestUrl = `${API_BASE}/api/leaderboard`;
+    console.log("[LEADERBOARD] GET request", { url: requestUrl });
     try {
-      const res = await fetch(`${API_BASE}/api/leaderboard`);
-      leaderboardRef.current = await res.json();
-    } catch { leaderboardRef.current = []; }
+      const res = await fetch(requestUrl);
+      const responseBody = await res.text();
+      console.log("[LEADERBOARD] GET response", {
+        url: requestUrl,
+        status: res.status,
+        body: responseBody,
+      });
+      if (!res.ok) throw new Error(`Leaderboard GET failed with status ${res.status}`);
+      leaderboardRef.current = JSON.parse(responseBody);
+    } catch (error) {
+      console.error("[LEADERBOARD] GET exception", { url: requestUrl, error });
+      leaderboardRef.current = [];
+    }
     leaderboardLoadingRef.current = false;
   }, []);
 
@@ -2435,22 +2447,52 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     if (!trimmed) return;
     setSubmitting(true);
     setSubmitError("");
+    const requestUrl = `${API_BASE}/api/leaderboard`;
+    console.log("[LEADERBOARD] POST request", { url: requestUrl });
     try {
-      const res = await fetch(`${API_BASE}/api/leaderboard`, {
+      const requestBody = JSON.stringify({
+        playerName: trimmed,
+        score: pendingScoreRef.current.score,
+        stageReached: pendingScoreRef.current.stageReached,
+      });
+      const sendRequest = () => fetch(requestUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          playerName: trimmed,
-          score: pendingScoreRef.current.score,
-          stageReached: pendingScoreRef.current.stageReached,
-        }),
+        body: requestBody,
       });
-      if (!res.ok) throw new Error("Server error");
+
+      let res = await sendRequest();
+      let responseBody = await res.text();
+      console.log("[LEADERBOARD] POST response", {
+        url: requestUrl,
+        status: res.status,
+        body: responseBody,
+      });
+
+      if (res.status >= 500) {
+        console.warn("[LEADERBOARD] POST retrying after server error", {
+          url: requestUrl,
+          status: res.status,
+        });
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        res = await sendRequest();
+        responseBody = await res.text();
+        console.log("[LEADERBOARD] POST retry response", {
+          url: requestUrl,
+          status: res.status,
+          body: responseBody,
+        });
+      }
+
+      if (!res.ok) throw new Error(`Leaderboard POST failed with status ${res.status}`);
       await fetchLeaderboard();
       setShowNameInput(false);
       setNameValue("");
       stateRef.current.phase = "leaderboard";
-    } catch { setSubmitError("Failed to submit. Try again."); }
+    } catch (error) {
+      console.error("[LEADERBOARD] POST exception", { url: requestUrl, error });
+      setSubmitError("Failed to submit. Try again.");
+    }
     setSubmitting(false);
   }, [fetchLeaderboard]);
 
