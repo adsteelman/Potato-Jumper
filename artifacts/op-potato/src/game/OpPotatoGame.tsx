@@ -2147,7 +2147,7 @@ interface OpPotatoGameProps {
 export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const canvasLayoutRef = useRef({ scale: 1, offsetX: 0, offsetY: 0 });
+  const canvasLayoutRef = useRef({ scale: 1, offsetX: 0, offsetY: 0, ratio: 1 });
   const safeAreaRef = useRef<SafeAreaInsets>({ top: 0, right: 0, bottom: 0, left: 0 });
   const stateRef = useRef<GameState>(makeInitialState(0));
   const rafRef = useRef<number>(0);
@@ -2198,6 +2198,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     mashed: null, powerUp: null, bgMusic: null,
   });
   const prevPhaseRef = useRef<GamePhase>("menu");
+  const renderDiagnosticsRef = useRef({ phase: "menu" as GamePhase, lastCloudLogAt: 0 });
   const gestureMusicStartRef = useRef(false);
 
   const clearHeldKeys = useCallback(() => {
@@ -2530,7 +2531,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       : Math.min(cw / CANVAS_W, ch / CANVAS_H);
     const offsetX = (cw - CANVAS_W * scale) / 2;
     const offsetY = (ch - CANVAS_H * scale) / 2;
-    canvasLayoutRef.current = { scale, offsetX, offsetY };
+    canvasLayoutRef.current = { scale, offsetX, offsetY, ratio };
     safeAreaRef.current = {
       top: Math.max(0, -offsetY / scale),
       right: Math.max(0, (safeArea.right - offsetX) / scale),
@@ -2559,6 +2560,11 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     if (!ctx) return;
 
     const gs = stateRef.current;
+    const renderDiagnostics = renderDiagnosticsRef.current;
+    if (renderDiagnostics.phase !== gs.phase) {
+      console.debug("[render] phase", renderDiagnostics.phase, "→", gs.phase);
+      renderDiagnostics.phase = gs.phase;
+    }
     const keyboardDirection =
       leftHeldRef.current === rightHeldRef.current
         ? 0
@@ -2645,12 +2651,27 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       return;
     }
 
+    // Treat every non-leaderboard frame as a fresh render pass. In particular,
+    // do not rely on WebKit preserving the context state restored by the
+    // leaderboard's physical-pixel fill across a phase transition.
+    const { scale, offsetX, offsetY, ratio } = canvasLayoutRef.current;
+    ctx.setTransform(ratio * scale, 0, 0, ratio * scale, offsetX * ratio, offsetY * ratio);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.filter = "none";
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "rgba(0,0,0,0)";
+
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, 0, CANVAS_W, CANVAS_H);
     ctx.clip();
 
+    if (t - renderDiagnostics.lastCloudLogAt >= 1000) {
+      console.debug("[render] clouds", { phase: gs.phase, count: gs.clouds.length, score: gs.score });
+      renderDiagnostics.lastCloudLogAt = t;
+    }
     drawBackground(ctx, gs.cameraY, gs.score, t, spritesRef.current, gs.clouds);
 
     // Draw platforms
