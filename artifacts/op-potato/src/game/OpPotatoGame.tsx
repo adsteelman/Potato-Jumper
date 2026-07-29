@@ -155,6 +155,7 @@ function lerp(a: number, b: number, t: number) {
 
 const MUSIC_PREF_KEY = "oppotato:musicOn";
 const SOUND_PREF_KEY = "oppotato:soundOn";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
 function loadAudioPref(key: string): boolean {
   if (typeof window === "undefined") return true;
@@ -2423,7 +2424,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   const fetchLeaderboard = useCallback(async () => {
     leaderboardLoadingRef.current = true;
     try {
-      const res = await fetch("/api/leaderboard");
+      const res = await fetch(`${API_BASE}/api/leaderboard`);
       leaderboardRef.current = await res.json();
     } catch { leaderboardRef.current = []; }
     leaderboardLoadingRef.current = false;
@@ -2435,7 +2436,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     setSubmitting(true);
     setSubmitError("");
     try {
-      const res = await fetch("/api/leaderboard", {
+      const res = await fetch(`${API_BASE}/api/leaderboard`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
