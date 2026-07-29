@@ -122,8 +122,7 @@ export function HelpScreen({ onBack, adBannerH }: Props) {
 
         {/* Controls */}
         <Section title="Controls">
-          <Row sprite="/sprites/potato-3.png" label="Tilt your phone left or right to steer" />
-          <Row label="Or tap the left / right side of the screen" />
+          <Row sprite="/sprites/potato-3.png" label="Press and hold the left or right side of the screen to steer" />
         </Section>
 
         {/* Buff Stages */}

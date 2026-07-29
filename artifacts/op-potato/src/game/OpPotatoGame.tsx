@@ -126,9 +126,6 @@ interface GameState {
   score: number;
   bestScore: number;
   startY: number;
-  controlMode: "tilt" | "tap";
-  tiltX: number; // current tilt value -1..1
-  tapDir: number; // -1, 0, 1
   showSettings: boolean;
   musicOn: boolean;
   soundOn: boolean;
@@ -287,9 +284,6 @@ function makeInitialState(bestScore: number): GameState {
     score: 0,
     bestScore,
     startY,
-    controlMode: "tap",
-    tiltX: 0,
-    tapDir: 0,
     showSettings: false,
     musicOn: loadAudioPref(MUSIC_PREF_KEY),
     soundOn: loadAudioPref(SOUND_PREF_KEY),
@@ -1375,7 +1369,6 @@ function drawDeadScreen(ctx: CanvasRenderingContext2D, score: number, bestScore:
 
 function drawSettingsPanel(
   ctx: CanvasRenderingContext2D,
-  controlMode: "tilt" | "tap",
   musicOn: boolean,
   soundOn: boolean
 ) {
@@ -1400,27 +1393,7 @@ function drawSettingsPanel(
 
   ctx.font = "16px 'Fredoka One', cursive";
   ctx.fillStyle = "rgba(255,255,255,0.8)";
-  ctx.fillText("Controls", CANVAS_W / 2, py + 72);
-
-  // Tilt button
-  const isTilt = controlMode === "tilt";
-  ctx.fillStyle = isTilt ? "#FFD700" : "rgba(255,255,255,0.2)";
-  drawRoundRect(ctx, SET_TILT_BTN.x, SET_TILT_BTN.y, SET_TILT_BTN.w, SET_TILT_BTN.h, 10);
-  ctx.fill();
-  ctx.fillStyle = isTilt ? "#000" : "#fff";
-  ctx.font = "bold 14px 'Fredoka One', cursive";
-  ctx.fillText("📱 Tilt", SET_TILT_BTN.x + SET_TILT_BTN.w / 2, SET_TILT_BTN.y + 26);
-
-  // Tap button
-  ctx.fillStyle = !isTilt ? "#FFD700" : "rgba(255,255,255,0.2)";
-  drawRoundRect(ctx, SET_TAP_BTN.x, SET_TAP_BTN.y, SET_TAP_BTN.w, SET_TAP_BTN.h, 10);
-  ctx.fill();
-  ctx.fillStyle = !isTilt ? "#000" : "#fff";
-  ctx.fillText("👆 Tap", SET_TAP_BTN.x + SET_TAP_BTN.w / 2, SET_TAP_BTN.y + 26);
-
-  ctx.font = "16px 'Fredoka One', cursive";
-  ctx.fillStyle = "rgba(255,255,255,0.8)";
-  ctx.fillText("Audio", CANVAS_W / 2, py + 142);
+  ctx.fillText("Audio", CANVAS_W / 2, py + 82);
 
   // Music toggle button
   ctx.fillStyle = musicOn ? "#FFD700" : "rgba(255,255,255,0.2)";
@@ -1583,16 +1556,14 @@ const MENU_LB_BTN = { x: CANVAS_W / 2 - 100, y: 648, w: 200, h: 44 };
 // Leaderboard screen "Play Again" button
 const LB_PLAY_BTN = { x: CANVAS_W / 2 - 100, y: CANVAS_H - 88, w: 200, h: 50 };
 
-// Settings panel (panel is 300 wide x 340 tall, centered)
+// Settings panel
 const SET_PW = 300;
-const SET_PH = 340;
+const SET_PH = 280;
 const SET_PX = (CANVAS_W - SET_PW) / 2; // 60
-const SET_PY = (CANVAS_H - SET_PH) / 2; // 210
-const SET_TILT_BTN  = { x: SET_PX + 20,  y: SET_PY + 82,  w: 120, h: 40 };
-const SET_TAP_BTN   = { x: SET_PX + 160, y: SET_PY + 82,  w: 120, h: 40 };
-const SET_MUSIC_BTN = { x: SET_PX + 20,  y: SET_PY + 152, w: 260, h: 40 };
-const SET_SFX_BTN   = { x: SET_PX + 20,  y: SET_PY + 202, w: 260, h: 40 };
-const SET_DONE_BTN  = { x: SET_PX + 80,  y: SET_PY + 262, w: 140, h: 38 };
+const SET_PY = (CANVAS_H - SET_PH) / 2;
+const SET_MUSIC_BTN = { x: SET_PX + 20,  y: SET_PY + 94, w: 260, h: 40 };
+const SET_SFX_BTN   = { x: SET_PX + 20,  y: SET_PY + 144, w: 260, h: 40 };
+const SET_DONE_BTN  = { x: SET_PX + 80,  y: SET_PY + 204, w: 140, h: 38 };
 
 function drawWinScreen(ctx: CanvasRenderingContext2D, score: number, bestScore: number, winAnim: number, t: number, wonAsFry = false) {
   const alpha = Math.min(1, winAnim * 1.6);
@@ -1724,6 +1695,9 @@ function drawLeaderboard(
   safeArea: SafeAreaInsets
 ) {
   const topOffset = safeArea.top;
+  const contentLeft = safeArea.left + 14;
+  const contentRight = CANVAS_W - safeArea.right - 14;
+  const contentWidth = Math.max(240, contentRight - contentLeft);
 
   // Background
   ctx.fillStyle = "rgba(10,5,30,0.96)";
@@ -1769,7 +1743,7 @@ function drawLeaderboard(
       ctx.fillStyle = isTop3
         ? `rgba(255,215,0,${0.08 - i * 0.02})`
         : "rgba(255,255,255,0.04)";
-      drawRoundRect(ctx, 14, ry, CANVAS_W - 28, rowH - 4, 10);
+      drawRoundRect(ctx, contentLeft, ry, contentWidth, rowH - 4, 10);
       ctx.fill();
 
       // Rank medal
@@ -1779,23 +1753,38 @@ function drawLeaderboard(
       ctx.fillStyle = i < 3 ? "#FFD700" : "rgba(255,255,255,0.55)";
       ctx.textAlign = "left";
       ctx.font = i < 3 ? "18px 'Fredoka One', cursive" : "bold 14px 'Fredoka One', cursive";
-      ctx.fillText(rankStr, 26, ry + 28);
+      const rankX = contentLeft + 12;
+      const nameX = contentLeft + 58;
+      const scoreRight = contentRight - 8;
+      const stageX = scoreRight - 66;
+      ctx.fillText(rankStr, rankX, ry + 28);
 
       // Name
       ctx.textAlign = "left";
       ctx.font = `bold 15px 'Fredoka One', cursive`;
       ctx.fillStyle = i < 3 ? "#fff" : "rgba(255,255,255,0.85)";
-      ctx.fillText(e.playerName.slice(0, 12), 72, ry + 28);
+      const availableNameWidth = Math.max(36, stageX - nameX - 24);
+      let displayName = e.playerName.slice(0, 12);
+      while (displayName.length > 1 && ctx.measureText(displayName).width > availableNameWidth) {
+        displayName = `${displayName.slice(0, -2)}…`;
+      }
+      ctx.fillText(displayName, nameX, ry + 28);
 
       // Stage emoji
       ctx.font = "16px 'Fredoka One', cursive";
       ctx.textAlign = "right";
-      ctx.fillText(STAGE_EMOJIS[Math.min(e.stageReached, 4)], CANVAS_W - 80, ry + 28);
+      ctx.fillText(STAGE_EMOJIS[Math.min(e.stageReached, 4)], stageX, ry + 28);
 
       // Score
-      ctx.font = `bold ${i < 3 ? 16 : 14}px 'Fredoka One', cursive`;
+      let scoreFontSize = i < 3 ? 16 : 14;
+      const scoreText = e.score.toLocaleString();
+      ctx.font = `bold ${scoreFontSize}px 'Fredoka One', cursive`;
+      while (scoreFontSize > 10 && ctx.measureText(scoreText).width > 60) {
+        scoreFontSize -= 1;
+        ctx.font = `bold ${scoreFontSize}px 'Fredoka One', cursive`;
+      }
       ctx.fillStyle = i === 0 ? "#FFD700" : i === 1 ? "#C0C0C0" : i === 2 ? "#CD7F32" : "rgba(255,255,255,0.75)";
-      ctx.fillText(e.score.toLocaleString(), CANVAS_W - 20, ry + 28);
+      ctx.fillText(scoreText, scoreRight, ry + 28);
     }
   }
 
@@ -1919,20 +1908,15 @@ function spawnParticles(gs: GameState, x: number, y: number, color: string, coun
   }
 }
 
-function tickGame(gs: GameState, tiltX: number, tapDir: number, dt: number, onSound?: (event: SoundEvent) => void): boolean {
+function tickGame(gs: GameState, tapDir: number, dt: number, onSound?: (event: SoundEvent) => void): boolean {
   const { player } = gs;
   if (gs.phase !== "playing" && gs.phase !== "winning") return false;
 
   gs.bgPhase += dt;
   if (gs.jumpFlash > 0) gs.jumpFlash -= dt;
 
-  // Determine horizontal input. Tilt mode still prefers device orientation, but
-  // taps/arrow-WASD keys (tapDir) always work as a fallback so desktop/no-tilt
-  // devices and quick taps immediately move the player.
-  const inputX = gs.controlMode === "tilt" && tiltX !== 0 ? tiltX : tapDir;
-
   // Apply physics
-  player.vx = lerp(player.vx, inputX * PLAYER_SPEED, 0.28);
+  player.vx = lerp(player.vx, tapDir * PLAYER_SPEED, 0.28);
   // Floaty apex: reduce gravity when near the peak of the arc
   const apexFactor = Math.min(1, Math.abs(player.vy) / 4);
   player.vy += GRAVITY * (0.25 + 0.75 * apexFactor);
@@ -2171,7 +2155,6 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   const stateRef = useRef<GameState>(makeInitialState(0));
   const rafRef = useRef<number>(0);
   const lastTRef = useRef<number>(0);
-  const tiltRef = useRef(0);
   const tapDirRef = useRef(0);
   const leftHeldRef = useRef(false);
   const rightHeldRef = useRef(false);
@@ -2537,7 +2520,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
 
     const safeArea = getSafeAreaInsets();
     const cw = window.innerWidth;
-    const ch = window.innerHeight - AD_BANNER_HEIGHT - (adsEnabled ? safeArea.bottom : 0);
+    const ch = Math.max(1, window.innerHeight - safeArea.top - safeArea.bottom - AD_BANNER_HEIGHT);
     const viewportAspect = cw / ch;
     const gameAspect = CANVAS_W / CANVAS_H;
     const aspectDifference = Math.abs(viewportAspect / gameAspect - 1);
@@ -2549,15 +2532,15 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     const offsetY = (ch - CANVAS_H * scale) / 2;
     canvasLayoutRef.current = { scale, offsetX, offsetY };
     safeAreaRef.current = {
-      top: Math.max(0, (safeArea.top - offsetY) / scale),
+      top: Math.max(0, -offsetY / scale),
       right: Math.max(0, (safeArea.right - offsetX) / scale),
-      bottom: Math.max(0, (safeArea.bottom - offsetY) / scale),
+      bottom: Math.max(0, -offsetY / scale),
       left: Math.max(0, (safeArea.left - offsetX) / scale),
     };
 
     canvas.style.position = "absolute";
     canvas.style.left = "0px";
-    canvas.style.top = "0px";
+    canvas.style.top = `${safeArea.top}px`;
     canvas.style.width = `${cw}px`;
     canvas.style.height = `${ch}px`;
     canvas.width = Math.round(cw * ratio);
@@ -2613,7 +2596,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     // Tick game (slowed during winning)
     if ((gs.phase === "playing" || gs.phase === "winning") && !gs.showSettings) {
       const movementDirection = keyboardDirection !== 0 ? keyboardDirection : tapDirRef.current;
-      tickGame(gs, tiltRef.current, movementDirection, dt * (gs.phase === "winning" ? gs.slowMo : 1), onSound);
+      tickGame(gs, movementDirection, dt * (gs.phase === "winning" ? gs.slowMo : 1), onSound);
     }
 
     // Phase-change side-effects: music start / stop / mashed
@@ -2753,7 +2736,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
 
     // Settings panel
     if (gs.showSettings) {
-      drawSettingsPanel(ctx, gs.controlMode, gs.musicOn, gs.soundOn);
+      drawSettingsPanel(ctx, gs.musicOn, gs.soundOn);
     }
     
     ctx.restore();
@@ -2774,19 +2757,6 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     };
   }, [render, resizeCanvas]);
 
-  // Tilt control
-  useEffect(() => {
-    const handleOrientation = (e: DeviceOrientationEvent) => {
-      if (stateRef.current.controlMode !== "tilt") {
-        return;
-      }
-      const gamma = e.gamma ?? 0; // -90 to 90
-      tiltRef.current = Math.max(-1, Math.min(1, gamma / 30));
-    };
-    window.addEventListener("deviceorientation", handleOrientation);
-    return () => window.removeEventListener("deviceorientation", handleOrientation);
-  }, []);
-
   useEffect(() => {
     const handleWindowBlur = () => clearHeldKeys();
     const handleVisibilityChange = () => {
@@ -2800,18 +2770,16 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     };
   }, [clearHeldKeys]);
 
-  const initializeTapMode = useCallback(() => {
-    stateRef.current.controlMode = "tap";
-    tiltRef.current = 0;
+  const focusGameplay = useCallback(() => {
     tapDirRef.current = 0;
     canvasRef.current?.focus({ preventScroll: true });
   }, []);
 
-  // Initialize Tap mode after the splash overlay has actually unmounted so
+  // Focus gameplay after the splash overlay has actually unmounted so
   // its start control cannot retain focus over the canvas.
   useEffect(() => {
-    if (!showSplash && stateRef.current.controlMode === "tap") initializeTapMode();
-  }, [showSplash, initializeTapMode]);
+    if (!showSplash) focusGameplay();
+  }, [showSplash, focusGameplay]);
 
   // Handle canvas interactions
   const getCanvasPoint = (clientX: number, clientY: number): { x: number; y: number } => {
@@ -2831,14 +2799,6 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
 
     // Settings panel interactions
     if (gs.showSettings) {
-      // Tilt button
-      if (x > SET_TILT_BTN.x && x < SET_TILT_BTN.x + SET_TILT_BTN.w && y > SET_TILT_BTN.y && y < SET_TILT_BTN.y + SET_TILT_BTN.h) {
-        gs.controlMode = "tilt";
-      }
-      // Tap button
-      if (x > SET_TAP_BTN.x && x < SET_TAP_BTN.x + SET_TAP_BTN.w && y > SET_TAP_BTN.y && y < SET_TAP_BTN.y + SET_TAP_BTN.h) {
-        initializeTapMode();
-      }
       // Music toggle button
       if (x > SET_MUSIC_BTN.x && x < SET_MUSIC_BTN.x + SET_MUSIC_BTN.w && y > SET_MUSIC_BTN.y && y < SET_MUSIC_BTN.y + SET_MUSIC_BTN.h) {
         gs.musicOn = !gs.musicOn;
@@ -2881,7 +2841,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       }
       if (!assetsReady) return;
       startAudioFromGesture();
-      if (gs.controlMode === "tap") initializeTapMode();
+      focusGameplay();
       gs.phase = "playing";
       return;
     }
@@ -2959,7 +2919,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       return;
     }
 
-    // Playing: tap direction (works as a fallback even in tilt mode)
+    // Playing: hold the left or right side to steer.
     if (gs.phase === "playing") {
       tapDirRef.current = x < CANVAS_W / 2 ? -1 : 1;
       return;
@@ -2984,13 +2944,13 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       }
       if (gs.phase === "menu") {
         if (!assetsReady) return;
-        if (gs.controlMode === "tap") initializeTapMode();
+        focusGameplay();
         gs.phase = "playing";
         return;
       }
       if (gs.phase === "dead" || gs.phase === "won") {
         if (!assetsReady) return;
-        if (gs.controlMode === "tap") initializeTapMode();
+        focusGameplay();
         const best = gs.bestScore;
         clearHeldKeys();
         Object.assign(stateRef.current, makeInitialState(best));
@@ -3010,7 +2970,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [assetsReady, showSplash, showHelp, showNameInput, initializeTapMode, clearHeldKeys]);
+  }, [assetsReady, showSplash, showHelp, showNameInput, focusGameplay, clearHeldKeys]);
 
   return (
     <div
