@@ -1402,7 +1402,7 @@ function drawSettingsPanel(
 
 function getSettingsButtonBounds(safeArea: SafeAreaInsets) {
   const padding = 18;
-  return { x: CANVAS_W - safeArea.right - padding - 44, y: CANVAS_H - safeArea.bottom - padding - 44, w: 44, h: 44 };
+  return { x: CANVAS_W - safeArea.right - padding - 44, y: CANVAS_H - safeArea.bottom - padding - 44 - 8, w: 44, h: 44 };
 }
 
 function drawSettingsButton(ctx: CanvasRenderingContext2D, safeArea: SafeAreaInsets) {
