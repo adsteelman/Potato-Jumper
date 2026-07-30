@@ -1437,6 +1437,52 @@ function drawSettingsButton(ctx: CanvasRenderingContext2D, safeArea: SafeAreaIns
 
 let victoryAudioContext: AudioContext | null = null;
 
+// TEMP IMPACT WEB AUDIO DIAGNOSTIC: keep one context and one decoded buffer.
+const IMPACT_AUDIO_SRC = "/sounds/Jump.wav";
+const IMPACT_AUDIO_VOLUME = 0.50;
+let impactAudioContext: AudioContext | null = null;
+let impactAudioBuffer: AudioBuffer | null = null;
+let impactAudioBufferPromise: Promise<AudioBuffer> | null = null;
+
+function getImpactAudioContext(): AudioContext {
+  if (!impactAudioContext || impactAudioContext.state === "closed") {
+    const AudioContextClass = window.AudioContext || (window as unknown as {
+      webkitAudioContext: typeof AudioContext;
+    }).webkitAudioContext;
+    impactAudioContext = new AudioContextClass();
+    console.info(`[TEMP IMPACT WEB AUDIO] initialized (${impactAudioContext.state})`);
+    impactAudioContext.addEventListener("statechange", () => {
+      console.info(`[TEMP IMPACT WEB AUDIO] state: ${impactAudioContext?.state ?? "closed"}`);
+    });
+  }
+  return impactAudioContext;
+}
+
+function loadImpactAudioBuffer(): Promise<AudioBuffer> {
+  if (impactAudioBuffer) return Promise.resolve(impactAudioBuffer);
+  if (impactAudioBufferPromise) return impactAudioBufferPromise;
+
+  impactAudioBufferPromise = (async () => {
+    try {
+      const response = await fetch(IMPACT_AUDIO_SRC);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const encodedAudio = await response.arrayBuffer();
+      const decodedAudio = await getImpactAudioContext().decodeAudioData(encodedAudio);
+      impactAudioBuffer = decodedAudio;
+      console.info(
+        `[TEMP IMPACT WEB AUDIO] decoded duration=${decodedAudio.duration.toFixed(6)}s ` +
+        `sampleRate=${decodedAudio.sampleRate}Hz channels=${decodedAudio.numberOfChannels}`,
+      );
+      return decodedAudio;
+    } catch (error) {
+      console.error("[TEMP IMPACT WEB AUDIO] initialization/decode failed", error);
+      throw error;
+    }
+  })();
+
+  return impactAudioBufferPromise;
+}
+
 function getVictoryAudioContext() {
   if (!victoryAudioContext || victoryAudioContext.state === "closed") {
     const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -2171,7 +2217,6 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   const pendingScoreRef = useRef({ score: 0, stageReached: 0 });
   const spritesRef = useRef<SpriteMap | null>(null);
   const soundsRef = useRef<{
-    impact: HTMLAudioElement | null;
     heal: HTMLAudioElement | null;
     hazardGrate: HTMLAudioElement | null;
     hazardPeel: HTMLAudioElement | null;
@@ -2180,7 +2225,6 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     powerUp: HTMLAudioElement | null;
     bgMusic: HTMLAudioElement | null;
   }>({
-    impact: null,
     heal: null,
     hazardGrate: null, hazardPeel: null, hazardSizzle: null,
     mashed: null, powerUp: null, bgMusic: null,
@@ -2359,7 +2403,6 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       return a;
     };
     soundsRef.current = {
-      impact:        load("/sounds/Jump.wav", false, 0.50),
       heal:          load("/sounds/Impact_heal.ogg",           false, 0.60),
       hazardGrate:   load("/sounds/Hazard_Grate.ogg",          false, 0.70),
       hazardPeel:    load("/sounds/Hazard_Peeler.ogg",         false, 0.70),
@@ -2368,6 +2411,9 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       powerUp:       load("/sounds/PowerUP.ogg",                false, 0.75),
       bgMusic:       load("/sounds/loop.ogg",                   true,  0.35),
     };
+    // Impact decoding is diagnostic audio work, not a gameplay-readiness gate.
+    // On iOS it may remain pending until the AudioContext is gesture-unlocked.
+    void loadImpactAudioBuffer().catch(() => {});
     Promise.all(audioReadyPromises).then(
       () => { if (active) markAssetGroupReady("audio"); },
       () => {},
@@ -2400,19 +2446,51 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   }, []);
 
   const playImpact = useCallback((impactType: SoundEvent) => {
-    const impact = soundsRef.current.impact;
-    if (!impact || !stateRef.current.soundOn) return;
+    if (!stateRef.current.soundOn) return;
 
     const now = performance.now();
     mostRecentImpactRef.current = { performanceNow: now, impactType };
-    const accepted = impact.paused || impact.ended;
-    if (!accepted) return;
 
-    if (impact.ended) impact.currentTime = 0;
-    impact.play().catch(() => {});
+    try {
+      const audioContext = getImpactAudioContext();
+      const buffer = impactAudioBuffer;
+      if (!buffer) return;
+
+      const source = audioContext.createBufferSource();
+      const gain = audioContext.createGain();
+      const startTime = audioContext.currentTime;
+      const attackSeconds = Math.min(0.004, buffer.duration / 3);
+      const releaseSeconds = Math.min(0.005, buffer.duration / 3);
+      const releaseStartTime = startTime + Math.max(attackSeconds, buffer.duration - releaseSeconds);
+      const endTime = startTime + buffer.duration;
+
+      source.buffer = buffer;
+      source.connect(gain);
+      gain.connect(audioContext.destination);
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(IMPACT_AUDIO_VOLUME, startTime + attackSeconds);
+      gain.gain.setValueAtTime(IMPACT_AUDIO_VOLUME, releaseStartTime);
+      gain.gain.linearRampToValueAtTime(0, endTime);
+      source.start(startTime);
+      source.stop(endTime);
+    } catch (error) {
+      console.error("[TEMP IMPACT WEB AUDIO] playback exception", error);
+    }
   }, []);
 
   const startAudioFromGesture = useCallback(() => {
+    try {
+      const impactContext = getImpactAudioContext();
+      if (impactContext.state === "suspended") {
+        void impactContext.resume().catch((error) => {
+          console.error("[TEMP IMPACT WEB AUDIO] resume failed", error);
+        });
+      }
+      void loadImpactAudioBuffer().catch(() => {});
+    } catch (error) {
+      console.error("[TEMP IMPACT WEB AUDIO] initialization failed", error);
+    }
+
     try {
       const audioContext = getVictoryAudioContext();
       if (audioContext.state === "suspended") {
@@ -2422,13 +2500,17 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       // AudioContext initialization can fail without blocking gameplay audio.
     }
 
-    const gs = stateRef.current;
-    const bgMusic = soundsRef.current.bgMusic;
-    if (bgMusic) {
-      bgMusic.currentTime = 0;
-      if (gs.musicOn) {
-        playAudio(bgMusic);
+    try {
+      const gs = stateRef.current;
+      const bgMusic = soundsRef.current.bgMusic;
+      if (bgMusic) {
+        bgMusic.currentTime = 0;
+        if (gs.musicOn) {
+          playAudio(bgMusic);
+        }
       }
+    } catch {
+      // Gesture input and phase changes must never depend on audio availability.
     }
     gestureMusicStartRef.current = true;
   }, []);
@@ -2934,9 +3016,9 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
         return;
       }
       if (!assetsReady) return;
-      startAudioFromGesture();
       focusGameplay();
       gs.phase = "playing";
+      startAudioFromGesture();
       return;
     }
 
@@ -2955,8 +3037,8 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
         clearHeldKeys();
         Object.assign(stateRef.current, makeInitialState(best));
         stateRef.current.bestScore = best;
-        startAudioFromGesture();
         stateRef.current.phase = "playing";
+        startAudioFromGesture();
       }
       return;
     }
@@ -2984,8 +3066,8 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
         clearHeldKeys();
         Object.assign(stateRef.current, makeInitialState(best));
         stateRef.current.bestScore = best;
-        startAudioFromGesture();
         stateRef.current.phase = "playing";
+        startAudioFromGesture();
         return;
       }
       // Submit & Leaderboard button
@@ -3114,8 +3196,8 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
             clearHeldKeys();
             Object.assign(stateRef.current, makeInitialState(best));
             stateRef.current.bestScore = best;
-            startAudioFromGesture();
             stateRef.current.phase = "playing";
+            startAudioFromGesture();
             setShowLeaderboard(false);
           }}
         />
