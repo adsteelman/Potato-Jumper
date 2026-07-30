@@ -26,13 +26,6 @@ type SoundEvent =
   | "heal"
   | "hazard_grate" | "hazard_peel" | "hazard_sizzle";
 
-interface ImpactDiagnostic {
-  platformId: number;
-  platformType: PlatformType;
-  platformX: number;
-  platformY: number;
-}
-
 interface Platform {
   id: number;
   x: number;
@@ -1892,7 +1885,7 @@ function spawnParticles(gs: GameState, x: number, y: number, color: string, coun
   }
 }
 
-function tickGame(gs: GameState, tapDir: number, dt: number, onSound?: (event: SoundEvent, impact?: ImpactDiagnostic) => void): boolean {
+function tickGame(gs: GameState, tapDir: number, dt: number, onSound?: (event: SoundEvent) => void): boolean {
   const { player } = gs;
   if (gs.phase !== "playing" && gs.phase !== "winning") return false;
 
@@ -2009,17 +2002,11 @@ function tickGame(gs: GameState, tapDir: number, dt: number, onSound?: (event: S
         gs.jumpFlash = 120;
 
         const isFry = player.state === "fry";
-        const impact = {
-          platformId: plat.id,
-          platformType: plat.type,
-          platformX: plat.x,
-          platformY: plat.y,
-        };
-        if (plat.type === "board") onSound?.(isFry ? "fry_board" : "potato_board", impact);
-        else if (plat.type === "sack") onSound?.(isFry ? "fry_sack" : "potato_sack", impact);
-        else if (plat.type === "bakingsheet") onSound?.(isFry ? "fry_sheet" : "potato_sheet", impact);
-        else if (plat.type === "shelf") onSound?.(isFry ? "fry_counter" : "potato_counter", impact);
-        else if (plat.type === "heal") onSound?.("heal", impact);
+        if (plat.type === "board") onSound?.(isFry ? "fry_board" : "potato_board");
+        else if (plat.type === "sack") onSound?.(isFry ? "fry_sack" : "potato_sack");
+        else if (plat.type === "bakingsheet") onSound?.(isFry ? "fry_sheet" : "potato_sheet");
+        else if (plat.type === "shelf") onSound?.(isFry ? "fry_counter" : "potato_counter");
+        else if (plat.type === "heal") onSound?.("heal");
 
         if (plat.type === "spring") {
           plat.springAnim = 1;
@@ -2324,14 +2311,14 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       return a;
     };
     soundsRef.current = {
-      potatoBoard:   load("/sounds/Impact_potato_board.ogg",   false, 0.50),
-      fryBoard:      load("/sounds/Impact_fry_board.ogg",      false, 0.50),
-      potatoSack:    load("/sounds/Impact_potato_sack.ogg",    false, 0.50),
-      frySack:       load("/sounds/Impact_fry_sack.ogg",       false, 0.50),
-      potatoSheet:   load("/sounds/Impact_potato_sheet.ogg",   false, 0.50),
-      frySheet:      load("/sounds/Impact_fry_sheet.ogg",      false, 0.50),
-      potatoCounter: load("/sounds/Impact_potato_counter.ogg", false, 0.50),
-      fryCounter:    load("/sounds/Impact_fry_counter.ogg",    false, 0.50),
+      potatoBoard:   load("/sounds/Jump.wav", false, 0.50),
+      fryBoard:      load("/sounds/Jump.wav", false, 0.50),
+      potatoSack:    load("/sounds/Jump.wav", false, 0.50),
+      frySack:       load("/sounds/Jump.wav", false, 0.50),
+      potatoSheet:   load("/sounds/Jump.wav", false, 0.50),
+      frySheet:      load("/sounds/Jump.wav", false, 0.50),
+      potatoCounter: load("/sounds/Jump.wav", false, 0.50),
+      fryCounter:    load("/sounds/Jump.wav", false, 0.50),
       heal:          load("/sounds/Impact_heal.ogg",           false, 0.60),
       hazardGrate:   load("/sounds/Hazard_Grate.ogg",          false, 0.70),
       hazardPeel:    load("/sounds/Hazard_Peeler.ogg",         false, 0.70),
@@ -2565,33 +2552,8 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     }
 
     // Sound callback forwarded from tickGame events
-    const onSound = (event: SoundEvent, impact?: ImpactDiagnostic) => {
+    const onSound = (event: SoundEvent) => {
       const s = soundsRef.current;
-      const impactAudio =
-        event === "potato_board" ? s.potatoBoard :
-        event === "fry_board" ? s.fryBoard :
-        event === "potato_sack" ? s.potatoSack :
-        event === "fry_sack" ? s.frySack :
-        event === "potato_sheet" ? s.potatoSheet :
-        event === "fry_sheet" ? s.frySheet :
-        event === "potato_counter" ? s.potatoCounter :
-        event === "fry_counter" ? s.fryCounter :
-        event === "heal" ? s.heal : null;
-      if (impact && impactAudio) {
-        console.debug("[IMPACT]", {
-          timestamp: new Date().toISOString(),
-          impactType: event,
-          soundFilename: new URL(impactAudio.currentSrc || impactAudio.src).pathname.split("/").pop(),
-          gamePhase: gs.phase,
-          platform: impact,
-          audioBeforePlay: {
-            paused: impactAudio.paused,
-            ended: impactAudio.ended,
-            currentTime: impactAudio.currentTime,
-            duration: impactAudio.duration,
-          },
-        });
-      }
       if (event === "powerup")             playOneShot(s.powerUp);
       else if (event === "potato_board")   playOneShot(s.potatoBoard);
       else if (event === "fry_board")      playOneShot(s.fryBoard);
