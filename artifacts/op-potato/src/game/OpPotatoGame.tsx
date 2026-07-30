@@ -1443,6 +1443,22 @@ const IMPACT_AUDIO_VOLUME = 0.50;
 let impactAudioContext: AudioContext | null = null;
 let impactAudioBuffer: AudioBuffer | null = null;
 let impactAudioBufferPromise: Promise<AudioBuffer> | null = null;
+let impactResumeDiagnosticLogged = false;
+let impactResumeAfterDiagnosticLogged = false;
+let impactFirstAttemptLogged = false;
+let impactFirstPlaybackExceptionLogged = false;
+let impactFirstInitializationFailureLogged = false;
+
+function getImpactAudioUrl(): string {
+  const vitePublicPath = `${import.meta.env.BASE_URL}${IMPACT_AUDIO_SRC.replace(/^\//, "")}`;
+  return new URL(vitePublicPath, document.baseURI).href;
+}
+
+function logFirstImpactInitializationFailure(error: unknown): void {
+  if (impactFirstInitializationFailureLogged) return;
+  impactFirstInitializationFailureLogged = true;
+  console.error("[TEMP IMPACT WEB AUDIO] first initialization/decode failure", error);
+}
 
 function getImpactAudioContext(): AudioContext {
   if (!impactAudioContext || impactAudioContext.state === "closed") {
@@ -1450,10 +1466,6 @@ function getImpactAudioContext(): AudioContext {
       webkitAudioContext: typeof AudioContext;
     }).webkitAudioContext;
     impactAudioContext = new AudioContextClass();
-    console.info(`[TEMP IMPACT WEB AUDIO] initialized (${impactAudioContext.state})`);
-    impactAudioContext.addEventListener("statechange", () => {
-      console.info(`[TEMP IMPACT WEB AUDIO] state: ${impactAudioContext?.state ?? "closed"}`);
-    });
   }
   return impactAudioContext;
 }
@@ -1464,18 +1476,24 @@ function loadImpactAudioBuffer(): Promise<AudioBuffer> {
 
   impactAudioBufferPromise = (async () => {
     try {
-      const response = await fetch(IMPACT_AUDIO_SRC);
+      const resolvedUrl = getImpactAudioUrl();
+      console.info(`[TEMP IMPACT WEB AUDIO] resolved URL: ${resolvedUrl}`);
+      const response = await fetch(resolvedUrl);
+      console.info(
+        `[TEMP IMPACT WEB AUDIO] fetch status=${response.status} contentType=${response.headers.get("content-type") ?? "missing"}`,
+      );
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const encodedAudio = await response.arrayBuffer();
+      console.info(`[TEMP IMPACT WEB AUDIO] fetched bytes=${encodedAudio.byteLength}`);
       const decodedAudio = await getImpactAudioContext().decodeAudioData(encodedAudio);
       impactAudioBuffer = decodedAudio;
       console.info(
-        `[TEMP IMPACT WEB AUDIO] decoded duration=${decodedAudio.duration.toFixed(6)}s ` +
-        `sampleRate=${decodedAudio.sampleRate}Hz channels=${decodedAudio.numberOfChannels}`,
+        `[TEMP IMPACT WEB AUDIO] decode success duration=${decodedAudio.duration.toFixed(6)}s ` +
+        `sampleRate=${decodedAudio.sampleRate}Hz channels=${decodedAudio.numberOfChannels} frames=${decodedAudio.length}`,
       );
       return decodedAudio;
     } catch (error) {
-      console.error("[TEMP IMPACT WEB AUDIO] initialization/decode failed", error);
+      logFirstImpactInitializationFailure(error);
       throw error;
     }
   })();
@@ -2454,7 +2472,20 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     try {
       const audioContext = getImpactAudioContext();
       const buffer = impactAudioBuffer;
-      if (!buffer) return;
+      if (!impactFirstAttemptLogged) {
+        impactFirstAttemptLogged = true;
+        console.info(
+          `[TEMP IMPACT WEB AUDIO] first impact attempt type=${impactType} ` +
+          `contextState=${audioContext.state} bufferAvailable=${buffer !== null}`,
+        );
+        if (!buffer) {
+          console.info("[TEMP IMPACT WEB AUDIO] first impact skipped: buffer unavailable");
+        }
+      }
+      if (!buffer) {
+        void loadImpactAudioBuffer().catch(() => {});
+        return;
+      }
 
       const source = audioContext.createBufferSource();
       const gain = audioContext.createGain();
@@ -2474,21 +2505,36 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       source.start(startTime);
       source.stop(endTime);
     } catch (error) {
-      console.error("[TEMP IMPACT WEB AUDIO] playback exception", error);
+      if (!impactFirstPlaybackExceptionLogged) {
+        impactFirstPlaybackExceptionLogged = true;
+        console.error("[TEMP IMPACT WEB AUDIO] first playback exception", error);
+      }
     }
   }, []);
 
   const startAudioFromGesture = useCallback(() => {
     try {
       const impactContext = getImpactAudioContext();
-      if (impactContext.state === "suspended") {
+      if (!impactResumeDiagnosticLogged) {
+        impactResumeDiagnosticLogged = true;
+        console.info(`[TEMP IMPACT WEB AUDIO] context state before resume: ${impactContext.state}`);
+      }
+      if (impactContext.state !== "running") {
         void impactContext.resume().catch((error) => {
-          console.error("[TEMP IMPACT WEB AUDIO] resume failed", error);
+          logFirstImpactInitializationFailure(error);
+        }).finally(() => {
+          if (!impactResumeAfterDiagnosticLogged) {
+            impactResumeAfterDiagnosticLogged = true;
+            console.info(`[TEMP IMPACT WEB AUDIO] context state after resume: ${impactContext.state}`);
+          }
         });
+      } else if (!impactResumeAfterDiagnosticLogged) {
+        impactResumeAfterDiagnosticLogged = true;
+        console.info(`[TEMP IMPACT WEB AUDIO] context state after resume: ${impactContext.state}`);
       }
       void loadImpactAudioBuffer().catch(() => {});
     } catch (error) {
-      console.error("[TEMP IMPACT WEB AUDIO] initialization failed", error);
+      logFirstImpactInitializationFailure(error);
     }
 
     try {
