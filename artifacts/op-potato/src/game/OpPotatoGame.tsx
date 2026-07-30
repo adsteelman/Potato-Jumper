@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { SplashScreen } from "./SplashScreen";
 import { HelpScreen } from "./HelpScreen";
+import { getRuntimeActivitySnapshot, markRuntimeActivity, noteRuntimeActivity } from "@/runtimeDiagnostics";
 
 const CANVAS_W = 420;
 const CANVAS_H = 760;
@@ -178,6 +179,32 @@ function playAudio(audio: HTMLAudioElement) {
   const promise = audio.play();
   promise.catch(() => {});
   return promise;
+}
+
+// TEMP RUNTIME DIAGNOSTICS: remove after the iPhone audio/stall investigation.
+const audioDiagnosticIds = new WeakMap<HTMLAudioElement, number>();
+let nextAudioDiagnosticId = 1;
+
+function getAudioDiagnosticId(audio: HTMLAudioElement) {
+  let id = audioDiagnosticIds.get(audio);
+  if (!id) {
+    id = nextAudioDiagnosticId++;
+    audioDiagnosticIds.set(audio, id);
+  }
+  return id;
+}
+
+function getAudioDiagnosticState(audio: HTMLAudioElement) {
+  return {
+    src: audio.currentSrc || audio.src,
+    currentTime: audio.currentTime,
+    paused: audio.paused,
+    ended: audio.ended,
+    readyState: audio.readyState,
+    networkState: audio.networkState,
+    playbackRate: audio.playbackRate,
+    volume: audio.volume,
+  };
 }
 
 function initPlatforms(startY: number): { platforms: Platform[]; nextId: number } {
@@ -2153,14 +2180,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   const pendingScoreRef = useRef({ score: 0, stageReached: 0 });
   const spritesRef = useRef<SpriteMap | null>(null);
   const soundsRef = useRef<{
-    potatoBoard: HTMLAudioElement | null;
-    fryBoard: HTMLAudioElement | null;
-    potatoSack: HTMLAudioElement | null;
-    frySack: HTMLAudioElement | null;
-    potatoSheet: HTMLAudioElement | null;
-    frySheet: HTMLAudioElement | null;
-    potatoCounter: HTMLAudioElement | null;
-    fryCounter: HTMLAudioElement | null;
+    impact: HTMLAudioElement | null;
     heal: HTMLAudioElement | null;
     hazardGrate: HTMLAudioElement | null;
     hazardPeel: HTMLAudioElement | null;
@@ -2169,16 +2189,20 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     powerUp: HTMLAudioElement | null;
     bgMusic: HTMLAudioElement | null;
   }>({
-    potatoBoard: null, fryBoard: null,
-    potatoSack: null, frySack: null,
-    potatoSheet: null, frySheet: null,
-    potatoCounter: null, fryCounter: null,
+    impact: null,
     heal: null,
     hazardGrate: null, hazardPeel: null, hazardSizzle: null,
     mashed: null, powerUp: null, bgMusic: null,
   });
   const prevPhaseRef = useRef<GamePhase>("menu");
   const gestureMusicStartRef = useRef(false);
+  const lastFrameDeltaRef = useRef(0);
+  const lastAcceptedImpactAtRef = useRef<number | null>(null);
+  const mostRecentImpactRef = useRef<{
+    performanceNow: number;
+    impactType: SoundEvent;
+    audioId: number;
+  } | null>(null);
 
   const clearHeldKeys = useCallback(() => {
     leftHeldRef.current = false;
@@ -2282,6 +2306,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
         ? src.replace(/\.ogg$/, ".mp3")
         : src;
       const a = new Audio();
+      const audioId = getAudioDiagnosticId(a);
       a.loop = loop;
       a.volume = volume;
       a.preload = "auto";
@@ -2306,19 +2331,34 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
         readinessCleanups.push(cleanup);
       });
       audioReadyPromises.push(ready);
+      if (src === "/sounds/Jump.wav") {
+        // TEMP RUNTIME DIAGNOSTICS: shared impact element lifecycle only.
+        const jumpEvents: Array<keyof HTMLMediaElementEventMap> = [
+          "play", "playing", "waiting", "stalled", "error", "ended",
+        ];
+        const onJumpEvent = (event: Event) => {
+          const now = performance.now();
+          console.debug("[TEMP JUMP AUDIO EVENT]", {
+            timestamp: new Date().toISOString(),
+            performanceNow: now,
+            event: event.type,
+            audioId,
+            gamePhase: stateRef.current.phase,
+            ...getAudioDiagnosticState(a),
+            activity: getRuntimeActivitySnapshot(now),
+          });
+        };
+        jumpEvents.forEach((eventName) => a.addEventListener(eventName, onJumpEvent));
+        readinessCleanups.push(() => {
+          jumpEvents.forEach((eventName) => a.removeEventListener(eventName, onJumpEvent));
+        });
+      }
       a.src = resolvedSrc;
       a.load();
       return a;
     };
     soundsRef.current = {
-      potatoBoard:   load("/sounds/Jump.wav", false, 0.50),
-      fryBoard:      load("/sounds/Jump.wav", false, 0.50),
-      potatoSack:    load("/sounds/Jump.wav", false, 0.50),
-      frySack:       load("/sounds/Jump.wav", false, 0.50),
-      potatoSheet:   load("/sounds/Jump.wav", false, 0.50),
-      frySheet:      load("/sounds/Jump.wav", false, 0.50),
-      potatoCounter: load("/sounds/Jump.wav", false, 0.50),
-      fryCounter:    load("/sounds/Jump.wav", false, 0.50),
+      impact:        load("/sounds/Jump.wav", false, 0.50),
       heal:          load("/sounds/Impact_heal.ogg",           false, 0.60),
       hazardGrate:   load("/sounds/Hazard_Grate.ogg",          false, 0.70),
       hazardPeel:    load("/sounds/Hazard_Peeler.ogg",         false, 0.70),
@@ -2358,6 +2398,58 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     playAudio(el);
   }, []);
 
+  const playImpact = useCallback((impactType: SoundEvent) => {
+    const impact = soundsRef.current.impact;
+    if (!impact || !stateRef.current.soundOn) return;
+
+    // TEMP RUNTIME DIAGNOSTICS: controlled single-element impact playback.
+    const now = performance.now();
+    const audioId = getAudioDiagnosticId(impact);
+    const lastAcceptedAt = lastAcceptedImpactAtRef.current;
+    const timeSincePreviousAcceptedMs = lastAcceptedAt === null ? null : now - lastAcceptedAt;
+    const currentTimeBeforeReset = impact.currentTime;
+    const pausedBeforeReset = impact.paused;
+    const accepted = timeSincePreviousAcceptedMs === null || timeSincePreviousAcceptedMs >= 60;
+
+    console.debug("[TEMP IMPACT REQUEST]", {
+      timestamp: new Date().toISOString(),
+      performanceNow: now,
+      impactType,
+      audioId,
+      accepted,
+      suppressedByCooldown: !accepted,
+      timeSincePreviousAcceptedMs,
+      currentTimeBeforeReset,
+      pausedBeforeReset,
+      frameDeltaMs: lastFrameDeltaRef.current,
+      activity: getRuntimeActivitySnapshot(now),
+    });
+    if (!accepted) return;
+
+    lastAcceptedImpactAtRef.current = now;
+    mostRecentImpactRef.current = { performanceNow: now, impactType, audioId };
+    if (!impact.paused) impact.pause();
+    impact.currentTime = 0;
+    const promise = impact.play();
+    promise.then(
+      () => console.debug("[TEMP IMPACT PLAY RESOLVED]", {
+        timestamp: new Date().toISOString(),
+        performanceNow: performance.now(),
+        impactType,
+        audioId,
+        frameDeltaMs: lastFrameDeltaRef.current,
+      }),
+      (error) => console.error("[TEMP IMPACT PLAY REJECTED]", {
+        timestamp: new Date().toISOString(),
+        performanceNow: performance.now(),
+        impactType,
+        audioId,
+        error,
+        frameDeltaMs: lastFrameDeltaRef.current,
+      }),
+    );
+  }, []);
+
   const startAudioFromGesture = useCallback(() => {
     try {
       const audioContext = getVictoryAudioContext();
@@ -2382,6 +2474,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   const fetchLeaderboard = useCallback(async () => {
     setLeaderboardLoading(true);
     const requestUrl = `${API_BASE}/api/leaderboard`;
+    markRuntimeActivity("leaderboard", true, "fetch.begin", { requestUrl });
     try {
       const res = await fetch(requestUrl);
       const responseBody = await res.text();
@@ -2391,6 +2484,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     } catch {
       setLeaderboardEntries([]);
     }
+    markRuntimeActivity("leaderboard", false, "fetch.finished", { requestUrl });
     setLeaderboardLoading(false);
   }, []);
 
@@ -2408,11 +2502,18 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
         score: pendingScoreRef.current.score,
         stageReached: pendingScoreRef.current.stageReached,
       });
-      const sendRequest = () => fetch(requestUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: requestBody,
-      });
+      const sendRequest = async () => {
+        markRuntimeActivity("leaderboard", true, "submit.attempt.begin", { requestUrl });
+        try {
+          return await fetch(requestUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: requestBody,
+          });
+        } finally {
+          markRuntimeActivity("leaderboard", false, "submit.attempt.finished", { requestUrl });
+        }
+      };
 
       const retryableStatuses = new Set([500, 502, 503, 504]);
       const retryDelays = [0, 2000, 4000];
@@ -2452,6 +2553,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       stateRef.current.phase = "leaderboard";
       setShowLeaderboard(true);
     } catch {
+      noteRuntimeActivity("leaderboard", "submit.failed");
       setSubmitError("Failed to submit. Try again.");
     }
     setSubmitting(false);
@@ -2541,8 +2643,21 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
         : leftHeldRef.current
           ? -1
           : 1;
-    const dt = Math.min(t - lastTRef.current, 32);
+    const frameDelta = t - lastTRef.current;
+    const dt = Math.min(frameDelta, 32);
     lastTRef.current = t;
+    lastFrameDeltaRef.current = frameDelta;
+    if (frameDelta > 100) {
+      // TEMP RUNTIME DIAGNOSTICS: log stalls only, never every frame.
+      console.warn("[TEMP FRAME STALL]", {
+        timestamp: new Date().toISOString(),
+        performanceNow: t,
+        frameDeltaMs: frameDelta,
+        gamePhase: gs.phase,
+        mostRecentImpact: mostRecentImpactRef.current,
+        activity: getRuntimeActivitySnapshot(t),
+      });
+    }
 
     // Slow-mo ramp during winning phase → fully paused when "won"
     if (gs.phase === "winning") {
@@ -2555,14 +2670,12 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     const onSound = (event: SoundEvent) => {
       const s = soundsRef.current;
       if (event === "powerup")             playOneShot(s.powerUp);
-      else if (event === "potato_board")   playOneShot(s.potatoBoard);
-      else if (event === "fry_board")      playOneShot(s.fryBoard);
-      else if (event === "potato_sack")    playOneShot(s.potatoSack);
-      else if (event === "fry_sack")       playOneShot(s.frySack);
-      else if (event === "potato_sheet")   playOneShot(s.potatoSheet);
-      else if (event === "fry_sheet")      playOneShot(s.frySheet);
-      else if (event === "potato_counter") playOneShot(s.potatoCounter);
-      else if (event === "fry_counter")    playOneShot(s.fryCounter);
+      else if (
+        event === "potato_board" || event === "fry_board" ||
+        event === "potato_sack" || event === "fry_sack" ||
+        event === "potato_sheet" || event === "fry_sheet" ||
+        event === "potato_counter" || event === "fry_counter"
+      ) playImpact(event);
       else if (event === "heal")           playOneShot(s.heal);
       else if (event === "hazard_grate")   playOneShot(s.hazardGrate);
       else if (event === "hazard_peel")    playOneShot(s.hazardPeel);
