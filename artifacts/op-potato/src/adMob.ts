@@ -10,12 +10,18 @@ import { markRuntimeActivity, noteRuntimeActivity } from "@/runtimeDiagnostics";
 
 const IOS_TEST_BANNER_ID = "ca-app-pub-3940256099942544/2435281174";
 const ANDROID_TEST_BANNER_ID = "ca-app-pub-3940256099942544/6300978111";
+const TEMP_DISABLE_ADMOB_FOR_DIAGNOSTICS = true;
 
 function isSupportedNativePlatform(platform: string): platform is "ios" | "android" {
   return Capacitor.isNativePlatform() && (platform === "ios" || platform === "android");
 }
 
 export async function initializeAdMobBanner(): Promise<() => Promise<void>> {
+  if (TEMP_DISABLE_ADMOB_FOR_DIAGNOSTICS) {
+    console.info("[TEMP ADMOB DISABLED]");
+    return async () => {};
+  }
+
   const platform = Capacitor.getPlatform();
   if (!isSupportedNativePlatform(platform)) return async () => {};
 
