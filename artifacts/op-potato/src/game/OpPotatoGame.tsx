@@ -194,19 +194,6 @@ function getAudioDiagnosticId(audio: HTMLAudioElement) {
   return id;
 }
 
-function getAudioDiagnosticState(audio: HTMLAudioElement) {
-  return {
-    src: audio.currentSrc || audio.src,
-    currentTime: audio.currentTime,
-    paused: audio.paused,
-    ended: audio.ended,
-    readyState: audio.readyState,
-    networkState: audio.networkState,
-    playbackRate: audio.playbackRate,
-    volume: audio.volume,
-  };
-}
-
 function initPlatforms(startY: number): { platforms: Platform[]; nextId: number } {
   const platforms: Platform[] = [];
   let id = 0;
@@ -2197,7 +2184,6 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   const prevPhaseRef = useRef<GamePhase>("menu");
   const gestureMusicStartRef = useRef(false);
   const lastFrameDeltaRef = useRef(0);
-  const lastAcceptedImpactAtRef = useRef<number | null>(null);
   const mostRecentImpactRef = useRef<{
     performanceNow: number;
     impactType: SoundEvent;
@@ -2306,7 +2292,6 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
         ? src.replace(/\.ogg$/, ".mp3")
         : src;
       const a = new Audio();
-      const audioId = getAudioDiagnosticId(a);
       a.loop = loop;
       a.volume = volume;
       a.preload = "auto";
@@ -2334,18 +2319,15 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       if (src === "/sounds/Jump.wav") {
         // TEMP RUNTIME DIAGNOSTICS: shared impact element lifecycle only.
         const jumpEvents: Array<keyof HTMLMediaElementEventMap> = [
-          "play", "playing", "waiting", "stalled", "error", "ended",
+          "waiting", "stalled", "error", "ended",
         ];
         const onJumpEvent = (event: Event) => {
-          const now = performance.now();
           console.debug("[TEMP JUMP AUDIO EVENT]", {
-            timestamp: new Date().toISOString(),
-            performanceNow: now,
             event: event.type,
-            audioId,
-            gamePhase: stateRef.current.phase,
-            ...getAudioDiagnosticState(a),
-            activity: getRuntimeActivitySnapshot(now),
+            paused: a.paused,
+            ended: a.ended,
+            currentTime: a.currentTime,
+            duration: a.duration,
           });
         };
         jumpEvents.forEach((eventName) => a.addEventListener(eventName, onJumpEvent));
@@ -2402,50 +2384,35 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     const impact = soundsRef.current.impact;
     if (!impact || !stateRef.current.soundOn) return;
 
-    // TEMP RUNTIME DIAGNOSTICS: controlled single-element impact playback.
+    // TEMP RUNTIME DIAGNOSTICS: let active playback finish without pausing or seeking.
     const now = performance.now();
     const audioId = getAudioDiagnosticId(impact);
-    const lastAcceptedAt = lastAcceptedImpactAtRef.current;
-    const timeSincePreviousAcceptedMs = lastAcceptedAt === null ? null : now - lastAcceptedAt;
-    const currentTimeBeforeReset = impact.currentTime;
-    const pausedBeforeReset = impact.paused;
-    const accepted = timeSincePreviousAcceptedMs === null || timeSincePreviousAcceptedMs >= 60;
+    const accepted = impact.paused || impact.ended;
 
     console.debug("[TEMP IMPACT REQUEST]", {
-      timestamp: new Date().toISOString(),
-      performanceNow: now,
-      impactType,
-      audioId,
+      requestedImpactType: impactType,
       accepted,
-      suppressedByCooldown: !accepted,
-      timeSincePreviousAcceptedMs,
-      currentTimeBeforeReset,
-      pausedBeforeReset,
+      suppressed: !accepted,
+      paused: impact.paused,
+      ended: impact.ended,
+      currentTime: impact.currentTime,
+      duration: impact.duration,
       frameDeltaMs: lastFrameDeltaRef.current,
-      activity: getRuntimeActivitySnapshot(now),
     });
     if (!accepted) return;
 
-    lastAcceptedImpactAtRef.current = now;
     mostRecentImpactRef.current = { performanceNow: now, impactType, audioId };
-    if (!impact.paused) impact.pause();
-    impact.currentTime = 0;
+    if (impact.ended) impact.currentTime = 0;
     const promise = impact.play();
     promise.then(
       () => console.debug("[TEMP IMPACT PLAY RESOLVED]", {
-        timestamp: new Date().toISOString(),
-        performanceNow: performance.now(),
-        impactType,
-        audioId,
-        frameDeltaMs: lastFrameDeltaRef.current,
+        requestedImpactType: impactType,
+        playResolved: true,
       }),
       (error) => console.error("[TEMP IMPACT PLAY REJECTED]", {
-        timestamp: new Date().toISOString(),
-        performanceNow: performance.now(),
-        impactType,
-        audioId,
+        requestedImpactType: impactType,
+        playRejected: true,
         error,
-        frameDeltaMs: lastFrameDeltaRef.current,
       }),
     );
   }, []);
