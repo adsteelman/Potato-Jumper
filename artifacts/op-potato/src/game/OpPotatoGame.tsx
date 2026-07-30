@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { SplashScreen } from "./SplashScreen";
 import { HelpScreen } from "./HelpScreen";
-import { getRuntimeActivitySnapshot, markRuntimeActivity, noteRuntimeActivity } from "@/runtimeDiagnostics";
+import { markRuntimeActivity, noteRuntimeActivity } from "@/runtimeDiagnostics";
 
 const CANVAS_W = 420;
 const CANVAS_H = 760;
@@ -75,6 +75,23 @@ interface SafeAreaInsets {
   right: number;
   bottom: number;
   left: number;
+}
+
+// TEMP RUNTIME DIAGNOSTICS: fixed-size, silent recorder for device testing.
+interface BufferedRuntimeDiagnostic {
+  kind: "frame-stall" | "lifecycle";
+  event: string;
+  performanceNow: number;
+  frameDeltaMs: number;
+  gamePhase: GamePhase;
+  visibilityState: DocumentVisibilityState;
+  hasFocus: boolean;
+  mostRecentImpact: { performanceNow: number; impactType: SoundEvent } | null;
+  memory: {
+    usedJSHeapSize: number;
+    totalJSHeapSize: number;
+    jsHeapSizeLimit: number;
+  } | null;
 }
 
 interface LeaderboardEntry {
@@ -179,19 +196,6 @@ function playAudio(audio: HTMLAudioElement) {
   const promise = audio.play();
   promise.catch(() => {});
   return promise;
-}
-
-// TEMP RUNTIME DIAGNOSTICS: remove after the iPhone audio/stall investigation.
-const audioDiagnosticIds = new WeakMap<HTMLAudioElement, number>();
-let nextAudioDiagnosticId = 1;
-
-function getAudioDiagnosticId(audio: HTMLAudioElement) {
-  let id = audioDiagnosticIds.get(audio);
-  if (!id) {
-    id = nextAudioDiagnosticId++;
-    audioDiagnosticIds.set(audio, id);
-  }
-  return id;
 }
 
 function initPlatforms(startY: number): { platforms: Platform[]; nextId: number } {
@@ -2187,8 +2191,42 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   const mostRecentImpactRef = useRef<{
     performanceNow: number;
     impactType: SoundEvent;
-    audioId: number;
   } | null>(null);
+  const diagnosticBufferRef = useRef<BufferedRuntimeDiagnostic[]>([]);
+  const diagnosticWriteIndexRef = useRef(0);
+
+  const storeRuntimeDiagnostic = useCallback((
+    kind: BufferedRuntimeDiagnostic["kind"],
+    event: string,
+    frameDeltaMs: number,
+    now = performance.now(),
+  ) => {
+    const memory = (performance as Performance & {
+      memory?: BufferedRuntimeDiagnostic["memory"];
+    }).memory;
+    const entry: BufferedRuntimeDiagnostic = {
+      kind,
+      event,
+      performanceNow: now,
+      frameDeltaMs,
+      gamePhase: stateRef.current.phase,
+      visibilityState: document.visibilityState,
+      hasFocus: document.hasFocus(),
+      mostRecentImpact: mostRecentImpactRef.current,
+      memory: memory ? {
+        usedJSHeapSize: memory.usedJSHeapSize,
+        totalJSHeapSize: memory.totalJSHeapSize,
+        jsHeapSizeLimit: memory.jsHeapSizeLimit,
+      } : null,
+    };
+    const buffer = diagnosticBufferRef.current;
+    if (buffer.length < 20) {
+      buffer.push(entry);
+    } else {
+      buffer[diagnosticWriteIndexRef.current] = entry;
+      diagnosticWriteIndexRef.current = (diagnosticWriteIndexRef.current + 1) % 20;
+    }
+  }, []);
 
   const clearHeldKeys = useCallback(() => {
     leftHeldRef.current = false;
@@ -2316,25 +2354,6 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
         readinessCleanups.push(cleanup);
       });
       audioReadyPromises.push(ready);
-      if (src === "/sounds/Jump.wav") {
-        // TEMP RUNTIME DIAGNOSTICS: shared impact element lifecycle only.
-        const jumpEvents: Array<keyof HTMLMediaElementEventMap> = [
-          "waiting", "stalled", "error", "ended",
-        ];
-        const onJumpEvent = (event: Event) => {
-          console.debug("[TEMP JUMP AUDIO EVENT]", {
-            event: event.type,
-            paused: a.paused,
-            ended: a.ended,
-            currentTime: a.currentTime,
-            duration: a.duration,
-          });
-        };
-        jumpEvents.forEach((eventName) => a.addEventListener(eventName, onJumpEvent));
-        readinessCleanups.push(() => {
-          jumpEvents.forEach((eventName) => a.removeEventListener(eventName, onJumpEvent));
-        });
-      }
       a.src = resolvedSrc;
       a.load();
       return a;
@@ -2384,37 +2403,13 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     const impact = soundsRef.current.impact;
     if (!impact || !stateRef.current.soundOn) return;
 
-    // TEMP RUNTIME DIAGNOSTICS: let active playback finish without pausing or seeking.
     const now = performance.now();
-    const audioId = getAudioDiagnosticId(impact);
+    mostRecentImpactRef.current = { performanceNow: now, impactType };
     const accepted = impact.paused || impact.ended;
-
-    console.debug("[TEMP IMPACT REQUEST]", {
-      requestedImpactType: impactType,
-      accepted,
-      suppressed: !accepted,
-      paused: impact.paused,
-      ended: impact.ended,
-      currentTime: impact.currentTime,
-      duration: impact.duration,
-      frameDeltaMs: lastFrameDeltaRef.current,
-    });
     if (!accepted) return;
 
-    mostRecentImpactRef.current = { performanceNow: now, impactType, audioId };
     if (impact.ended) impact.currentTime = 0;
-    const promise = impact.play();
-    promise.then(
-      () => console.debug("[TEMP IMPACT PLAY RESOLVED]", {
-        requestedImpactType: impactType,
-        playResolved: true,
-      }),
-      (error) => console.error("[TEMP IMPACT PLAY REJECTED]", {
-        requestedImpactType: impactType,
-        playRejected: true,
-        error,
-      }),
-    );
+    impact.play().catch(() => {});
   }, []);
 
   const startAudioFromGesture = useCallback(() => {
@@ -2615,15 +2610,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     lastTRef.current = t;
     lastFrameDeltaRef.current = frameDelta;
     if (frameDelta > 100) {
-      // TEMP RUNTIME DIAGNOSTICS: log stalls only, never every frame.
-      console.warn("[TEMP FRAME STALL]", {
-        timestamp: new Date().toISOString(),
-        performanceNow: t,
-        frameDeltaMs: frameDelta,
-        gamePhase: gs.phase,
-        mostRecentImpact: mostRecentImpactRef.current,
-        activity: getRuntimeActivitySnapshot(t),
-      });
+      storeRuntimeDiagnostic("frame-stall", "requestAnimationFrame", frameDelta, t);
     }
 
     // Slow-mo ramp during winning phase → fully paused when "won"
@@ -2818,7 +2805,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     ctx.restore();
 
     rafRef.current = requestAnimationFrame(render);
-  }, []);
+  }, [storeRuntimeDiagnostic]);
 
   // Start game loop
   useEffect(() => {
@@ -2832,6 +2819,36 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       window.removeEventListener("resize", onResize);
     };
   }, [render, resizeCanvas]);
+
+  useEffect(() => {
+    // TEMP RUNTIME DIAGNOSTICS: store lifecycle events silently and print only
+    // when explicitly requested after gameplay testing.
+    const storeLifecycleEvent = (event: Event) => {
+      storeRuntimeDiagnostic("lifecycle", event.type, lastFrameDeltaRef.current);
+    };
+    const windowEvents = ["pagehide", "pageshow", "blur", "focus"] as const;
+    const documentEvents = ["visibilitychange", "freeze", "resume"] as const;
+    windowEvents.forEach((eventName) => window.addEventListener(eventName, storeLifecycleEvent));
+    documentEvents.forEach((eventName) => document.addEventListener(eventName, storeLifecycleEvent));
+
+    const diagnosticWindow = window as Window & {
+      __printOpPotatoDiagnostics?: () => void;
+    };
+    diagnosticWindow.__printOpPotatoDiagnostics = () => {
+      const buffer = diagnosticBufferRef.current;
+      const writeIndex = diagnosticWriteIndexRef.current;
+      const ordered = buffer.length < 20
+        ? [...buffer]
+        : [...buffer.slice(writeIndex), ...buffer.slice(0, writeIndex)];
+      console.table(ordered);
+    };
+
+    return () => {
+      windowEvents.forEach((eventName) => window.removeEventListener(eventName, storeLifecycleEvent));
+      documentEvents.forEach((eventName) => document.removeEventListener(eventName, storeLifecycleEvent));
+      delete diagnosticWindow.__printOpPotatoDiagnostics;
+    };
+  }, [storeRuntimeDiagnostic]);
 
   useEffect(() => {
     const handleWindowBlur = () => clearHeldKeys();
