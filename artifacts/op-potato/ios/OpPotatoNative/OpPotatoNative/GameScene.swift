@@ -3,13 +3,21 @@ import UIKit
 
 /// The scene coordinates input, physics contacts, and the fixed 60 FPS update loop.
 final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
+    private struct TrackedTouch {
+        let startLocation: CGPoint
+        let startTimestamp: TimeInterval
+        var currentLocation: CGPoint
+        var isDrag = false
+    }
+
     private let gameState = GameState()
     private let potato = Potato()
     private let stageManager = StageManager()
     private let cameraNode = SKCameraNode()
     private let hud = HUD()
     private let playerPositionDebugNode = SKShapeNode(rectOf: GameConstants.playerSize)
-    private var movementTouches: [ObjectIdentifier: CGPoint] = [:]
+    private var trackedTouches: [ObjectIdentifier: TrackedTouch] = [:]
+    private var gameplayActive = false
     private var safeAreaInsets = UIEdgeInsets.zero
     private var gameplayReady = false
     private var texturesReady = false
@@ -51,36 +59,45 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
         stageManager.update(cameraY: cameraNode.position.y, sceneSize: size)
     }
 
-    // Lower-screen touches hold left/right; an upper-screen touch requests a jump.
+    // A short stationary touch jumps; crossing the movement threshold becomes a drag.
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard gameplayReady else { return }
         for touch in touches {
             let location = touch.location(in: self)
-            let visibleBottom = cameraNode.position.y - size.height / 2
-            let jumpThreshold = visibleBottom + size.height * GameConstants.jumpControlHeightRatio
-            if location.y >= jumpThreshold {
-                print("[JUMP] requested velocityY=\(potato.physicsBody?.velocity.dy ?? 0) grounded=\(gameState.isGrounded)")
-                attemptJump()
-            } else {
-                movementTouches[ObjectIdentifier(touch)] = location
-            }
+            guard !isTouchInHUD(location) else { continue }
+            trackedTouches[ObjectIdentifier(touch)] = TrackedTouch(
+                startLocation: location,
+                startTimestamp: touch.timestamp,
+                currentLocation: location
+            )
+            print("[INPUT] began")
         }
-        updateHorizontalInput()
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        for touch in touches where movementTouches[ObjectIdentifier(touch)] != nil {
-            movementTouches[ObjectIdentifier(touch)] = touch.location(in: self)
+        for touch in touches {
+            let identifier = ObjectIdentifier(touch)
+            guard var trackedTouch = trackedTouches[identifier] else { continue }
+            trackedTouch.currentLocation = touch.location(in: self)
+            let distance = hypot(
+                trackedTouch.currentLocation.x - trackedTouch.startLocation.x,
+                trackedTouch.currentLocation.y - trackedTouch.startLocation.y
+            )
+            if !trackedTouch.isDrag, distance >= GameConstants.inputDragDistanceThreshold {
+                trackedTouch.isDrag = true
+                print("[INPUT] classified=drag")
+            }
+            trackedTouches[identifier] = trackedTouch
         }
         updateHorizontalInput()
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        removeMovementTouches(touches)
+        finishTouches(touches, allowTap: true)
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        removeMovementTouches(touches)
+        finishTouches(touches, allowTap: false)
     }
 
     func didBegin(_ contact: SKPhysicsContact) {
@@ -123,16 +140,38 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
 
     private func updateHorizontalInput() {
         let centerX = size.width / 2
-        let hasLeftTouch = movementTouches.values.contains { $0.x < centerX }
-        let hasRightTouch = movementTouches.values.contains { $0.x >= centerX }
+        let dragLocations = trackedTouches.values.filter(\.isDrag).map(\.currentLocation)
+        let hasLeftTouch = dragLocations.contains { $0.x < centerX }
+        let hasRightTouch = dragLocations.contains { $0.x >= centerX }
         gameState.horizontalInput = hasLeftTouch == hasRightTouch ? 0 : (hasLeftTouch ? -1 : 1)
     }
 
-    private func removeMovementTouches(_ touches: Set<UITouch>) {
+    private func finishTouches(_ touches: Set<UITouch>, allowTap: Bool) {
         for touch in touches {
-            movementTouches.removeValue(forKey: ObjectIdentifier(touch))
+            guard let trackedTouch = trackedTouches.removeValue(forKey: ObjectIdentifier(touch)) else { continue }
+            let duration = touch.timestamp - trackedTouch.startTimestamp
+            let isTap = allowTap && !trackedTouch.isDrag && duration <= GameConstants.inputTapMaximumDuration
+            guard isTap else {
+                if !trackedTouch.isDrag {
+                    print("[INPUT] classified=drag")
+                }
+                continue
+            }
+
+            print("[INPUT] classified=tap")
+            if !gameplayActive {
+                gameplayActive = true
+                continue
+            }
+            print("[JUMP] requested velocityY=\(potato.physicsBody?.velocity.dy ?? 0) grounded=\(gameState.isGrounded)")
+            attemptJump()
         }
         updateHorizontalInput()
+    }
+
+    private func isTouchInHUD(_ sceneLocation: CGPoint) -> Bool {
+        let cameraLocation = cameraNode.convert(sceneLocation, from: self)
+        return hud.calculateAccumulatedFrame().contains(cameraLocation)
     }
 
     private func attemptJump() {

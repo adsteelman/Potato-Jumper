@@ -11,7 +11,8 @@ enum GameConstants {
     static let jumpVelocity: CGFloat = 620
     static let landingMaximumUpwardVelocity: CGFloat = 20
     static let horizontalEdgeInset: CGFloat = 8
-    static let jumpControlHeightRatio: CGFloat = 0.55
+    static let inputDragDistanceThreshold: CGFloat = 12
+    static let inputTapMaximumDuration: Double = 0.35
 }
 
 /// A single category namespace prevents collision-mask values from drifting.
