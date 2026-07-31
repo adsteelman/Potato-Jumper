@@ -59,6 +59,7 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
             let visibleBottom = cameraNode.position.y - size.height / 2
             let jumpThreshold = visibleBottom + size.height * GameConstants.jumpControlHeightRatio
             if location.y >= jumpThreshold {
+                print("[JUMP] requested velocityY=\(potato.physicsBody?.velocity.dy ?? 0) grounded=\(gameState.isGrounded)")
                 attemptJump()
             } else {
                 movementTouches[ObjectIdentifier(touch)] = location
@@ -83,11 +84,14 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
     }
 
     func didBegin(_ contact: SKPhysicsContact) {
-        let categories = contact.bodyA.categoryBitMask | contact.bodyB.categoryBitMask
-        let landingPair = PhysicsCategory.player | PhysicsCategory.platform
-        if categories == landingPair, potato.physicsBody?.velocity.dy ?? 0 <= 0 {
-            gameState.isGrounded = true
-        }
+        guard let platform = platformNode(in: contact) else { return }
+        let verticalVelocity = potato.physicsBody?.velocity.dy ?? 0
+        let isFallingOrNearlyStill = verticalVelocity <= GameConstants.landingMaximumUpwardVelocity
+        let isAbovePlatform = potato.position.y > platform.position.y
+        guard isFallingOrNearlyStill, isAbovePlatform else { return }
+
+        gameState.isGrounded = true
+        print("[JUMP] landing detected velocityY=\(verticalVelocity) grounded=\(gameState.isGrounded)")
     }
 
     func didEnd(_ contact: SKPhysicsContact) {
@@ -132,9 +136,31 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
     }
 
     private func attemptJump() {
-        guard gameState.isGrounded else { return }
+        guard gameState.isGrounded else {
+            print("[JUMP] rejected velocityY=\(potato.physicsBody?.velocity.dy ?? 0) grounded=false")
+            return
+        }
         gameState.isGrounded = false
         potato.jump()
+        print("[JUMP] accepted velocityY=\(potato.physicsBody?.velocity.dy ?? 0) grounded=\(gameState.isGrounded)")
+    }
+
+    private func platformNode(in contact: SKPhysicsContact) -> SKNode? {
+        let playerBody: SKPhysicsBody
+        let platformBody: SKPhysicsBody
+        if contact.bodyA.categoryBitMask == PhysicsCategory.player,
+           contact.bodyB.categoryBitMask == PhysicsCategory.platform {
+            playerBody = contact.bodyA
+            platformBody = contact.bodyB
+        } else if contact.bodyB.categoryBitMask == PhysicsCategory.player,
+                  contact.bodyA.categoryBitMask == PhysicsCategory.platform {
+            playerBody = contact.bodyB
+            platformBody = contact.bodyA
+        } else {
+            return nil
+        }
+        guard playerBody.node === potato else { return nil }
+        return platformBody.node
     }
 
     private func clampPlayerToSceneBounds() {

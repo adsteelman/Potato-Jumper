@@ -14,7 +14,10 @@ final class Potato: SKSpriteNode {
         isHidden = false
 
         let body = SKPhysicsBody(rectangleOf: size)
+        body.isDynamic = true
+        body.affectedByGravity = true
         body.allowsRotation = false
+        body.pinned = false
         body.mass = 1
         body.friction = 0
         body.restitution = 0
@@ -65,7 +68,6 @@ final class Potato: SKSpriteNode {
     }
 
     func jump() {
-        physicsBody?.velocity.dy = 0
-        physicsBody?.applyImpulse(CGVector(dx: 0, dy: GameConstants.jumpImpulse))
+        physicsBody?.velocity.dy = GameConstants.jumpVelocity
     }
 }

@@ -8,7 +8,8 @@ enum GameConstants {
     static let platformSize = CGSize(width: 220, height: 20)
     static let platformBottomMargin: CGFloat = 72
     static let horizontalSpeed: CGFloat = 220
-    static let jumpImpulse: CGFloat = 620
+    static let jumpVelocity: CGFloat = 620
+    static let landingMaximumUpwardVelocity: CGFloat = 20
     static let horizontalEdgeInset: CGFloat = 8
     static let jumpControlHeightRatio: CGFloat = 0.55
 }
