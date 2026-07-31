@@ -154,6 +154,7 @@ function lerp(a: number, b: number, t: number) {
 const MUSIC_PREF_KEY = "oppotato:musicOn";
 const SOUND_PREF_KEY = "oppotato:soundOn";
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const AUDIO_DIAGNOSTIC_DISABLED = true;
 
 function loadAudioPref(key: string): boolean {
   if (typeof window === "undefined") return true;
@@ -190,6 +191,7 @@ function getAudioDiagnostics(audio: HTMLAudioElement) {
 }
 
 function playAudioWithDiagnostics(audio: HTMLAudioElement, action: string) {
+  if (AUDIO_DIAGNOSTIC_DISABLED) return Promise.resolve();
   console.log(`[AUDIO] play() called: ${action}`, getAudioDiagnostics(audio));
   const promise = audio.play();
   promise.then(
@@ -1448,6 +1450,7 @@ function getVictoryAudioContext() {
 }
 
 function playVictoryFanfare() {
+  if (AUDIO_DIAGNOSTIC_DISABLED) return;
   try {
     const actx = getVictoryAudioContext();
     // Ascending arpeggio: C5 E5 G5 C6 E6
@@ -2200,6 +2203,11 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   const prevPhaseRef = useRef<GamePhase>("menu");
   const renderDiagnosticsRef = useRef({ phase: "menu" as GamePhase, lastCloudLogAt: 0 });
   const gestureMusicStartRef = useRef(false);
+  const temporaryImpactAudioRef = useRef<{
+    context: AudioContext | null;
+    buffer: AudioBuffer | null;
+    loadPromise: Promise<void> | null;
+  }>({ context: null, buffer: null, loadPromise: null });
 
   const clearHeldKeys = useCallback(() => {
     leftHeldRef.current = false;
@@ -2295,6 +2303,10 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
 
   // Load sounds
   useEffect(() => {
+    if (AUDIO_DIAGNOSTIC_DISABLED) {
+      markAssetGroupReady("audio");
+      return;
+    }
     let active = true;
     const audioReadyPromises: Promise<void>[] = [];
     const readinessCleanups: Array<() => void> = [];
@@ -2332,14 +2344,14 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       return a;
     };
     soundsRef.current = {
-      potatoBoard:   load("/sounds/bong_001.mp3", false, 0.50),
-      fryBoard:      load("/sounds/bong_001.mp3", false, 0.50),
-      potatoSack:    load("/sounds/bong_001.mp3", false, 0.50),
-      frySack:       load("/sounds/bong_001.mp3", false, 0.50),
-      potatoSheet:   load("/sounds/bong_001.mp3", false, 0.50),
-      frySheet:      load("/sounds/bong_001.mp3", false, 0.50),
-      potatoCounter: load("/sounds/bong_001.mp3", false, 0.50),
-      fryCounter:    load("/sounds/bong_001.mp3", false, 0.50),
+      potatoBoard:   null,
+      fryBoard:      null,
+      potatoSack:    null,
+      frySack:       null,
+      potatoSheet:   null,
+      frySheet:      null,
+      potatoCounter: null,
+      fryCounter:    null,
       heal:          load("/sounds/Impact_heal.ogg",           false, 0.60),
       hazardGrate:   load("/sounds/Hazard_Grate.ogg",          false, 0.70),
       hazardPeel:    load("/sounds/Hazard_Peeler.ogg",         false, 0.70),
@@ -2379,7 +2391,88 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     playAudioWithDiagnostics(el, "sound effect");
   }, []);
 
+  const ensureTemporaryImpactAudio = useCallback(() => {
+    const temporaryAudio = temporaryImpactAudioRef.current;
+    if (AUDIO_DIAGNOSTIC_DISABLED) return temporaryAudio;
+    if (!temporaryAudio.context) {
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      temporaryAudio.context = new AudioContextClass();
+      console.log("[IMPACT WEB AUDIO] AudioContext state", { state: temporaryAudio.context.state });
+    }
+    if (!temporaryAudio.loadPromise) {
+      const context = temporaryAudio.context;
+      console.log("[IMPACT WEB AUDIO] fetch beginning");
+      temporaryAudio.loadPromise = fetch("/sounds/bong_001.mp3")
+        .then(async (response) => {
+          if (!response.ok) {
+            console.error("[IMPACT WEB AUDIO] fetch failed", { status: response.status });
+            return;
+          }
+          console.log("[IMPACT WEB AUDIO] fetch succeeded", { status: response.status });
+          let data: ArrayBuffer;
+          try {
+            data = await response.arrayBuffer();
+            console.log("[IMPACT WEB AUDIO] arrayBuffer succeeded");
+          } catch (error) {
+            console.error("[IMPACT WEB AUDIO] arrayBuffer failed", error);
+            return;
+          }
+          try {
+            temporaryAudio.buffer = await context.decodeAudioData(data);
+            console.log("[IMPACT WEB AUDIO] decode succeeded", { duration: temporaryAudio.buffer.duration });
+          } catch (error) {
+            console.error("[IMPACT WEB AUDIO] decode failed", error);
+          }
+        }, (error) => {
+          console.error("[IMPACT WEB AUDIO] fetch failed", error);
+        });
+    }
+    return temporaryAudio;
+  }, []);
+
+  const playTemporaryImpact = useCallback(() => {
+    if (AUDIO_DIAGNOSTIC_DISABLED) return;
+    if (!stateRef.current.soundOn) return;
+    const temporaryAudio = ensureTemporaryImpactAudio();
+    const startPlayback = () => {
+      const { context, buffer } = temporaryAudio;
+      if (!context || !buffer) return;
+      const source = context.createBufferSource();
+      const gain = context.createGain();
+      source.buffer = buffer;
+      gain.gain.value = 0.50;
+      source.connect(gain);
+      gain.connect(context.destination);
+      console.log("[IMPACT WEB AUDIO] AudioContext state before source.start()", { state: context.state });
+      try {
+        source.start();
+        console.log("[IMPACT WEB AUDIO] source.start() called");
+      } catch (error) {
+        console.error("[IMPACT WEB AUDIO] source.start() failed", error);
+        throw error;
+      }
+    };
+    if (temporaryAudio.buffer) startPlayback();
+    else temporaryAudio.loadPromise?.then(startPlayback);
+  }, [ensureTemporaryImpactAudio]);
+
   const startAudioFromGesture = useCallback(() => {
+    if (AUDIO_DIAGNOSTIC_DISABLED) {
+      gestureMusicStartRef.current = true;
+      return;
+    }
+    const temporaryImpactAudio = ensureTemporaryImpactAudio();
+    const temporaryImpactContext = temporaryImpactAudio.context;
+    if (temporaryImpactContext) {
+      console.log("[IMPACT WEB AUDIO] AudioContext state", { state: temporaryImpactContext.state });
+      if (temporaryImpactContext.state === "suspended") {
+        temporaryImpactContext.resume().then(
+          () => console.log("[IMPACT WEB AUDIO] AudioContext state", { state: temporaryImpactContext.state }),
+          (error) => console.error("[IMPACT WEB AUDIO] AudioContext resume failed", error),
+        );
+      }
+    }
+
     try {
       const audioContext = getVictoryAudioContext();
       if (audioContext.state === "suspended") {
@@ -2402,7 +2495,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       }
     }
     gestureMusicStartRef.current = true;
-  }, []);
+  }, [ensureTemporaryImpactAudio]);
 
   const fetchLeaderboard = useCallback(async () => {
     setLeaderboardLoading(true);
@@ -2585,14 +2678,14 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     const onSound = (event: SoundEvent) => {
       const s = soundsRef.current;
       if (event === "powerup")             playOneShot(s.powerUp);
-      else if (event === "potato_board")   playOneShot(s.potatoBoard);
-      else if (event === "fry_board")      playOneShot(s.fryBoard);
-      else if (event === "potato_sack")    playOneShot(s.potatoSack);
-      else if (event === "fry_sack")       playOneShot(s.frySack);
-      else if (event === "potato_sheet")   playOneShot(s.potatoSheet);
-      else if (event === "fry_sheet")      playOneShot(s.frySheet);
-      else if (event === "potato_counter") playOneShot(s.potatoCounter);
-      else if (event === "fry_counter")    playOneShot(s.fryCounter);
+      else if (event === "potato_board")   playTemporaryImpact();
+      else if (event === "fry_board")      playTemporaryImpact();
+      else if (event === "potato_sack")    playTemporaryImpact();
+      else if (event === "fry_sack")       playTemporaryImpact();
+      else if (event === "potato_sheet")   playTemporaryImpact();
+      else if (event === "fry_sheet")      playTemporaryImpact();
+      else if (event === "potato_counter") playTemporaryImpact();
+      else if (event === "fry_counter")    playTemporaryImpact();
       else if (event === "heal")           playOneShot(s.heal);
       else if (event === "hazard_grate")   playOneShot(s.hazardGrate);
       else if (event === "hazard_peel")    playOneShot(s.hazardPeel);
