@@ -7,8 +7,10 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
     private let potato = Potato()
     private let stageManager = StageManager()
     private let cameraNode = SKCameraNode()
+    private let hud = HUD()
     private var movementTouches: [ObjectIdentifier: CGPoint] = [:]
     private var safeAreaInsets = UIEdgeInsets.zero
+    private var gameplayReady = false
 
     override func didMove(to view: SKView) {
         backgroundColor = SKColor(red: 0.45, green: 0.78, blue: 0.96, alpha: 1)
@@ -18,6 +20,7 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
 
         addChild(cameraNode)
         camera = cameraNode
+        cameraNode.addChild(hud)
         addChild(potato)
         safeAreaInsets = view.safeAreaInsets
         layoutScene()
@@ -28,18 +31,31 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
             x: size.width / 2,
             y: startingPlatform.position.y + startingPlatform.size.height / 2 + potato.size.height / 2 + 2
         )
+        gameState.beginProgressTracking(at: potato.position.y)
+        hud.update(score: gameState.score, stage: gameState.currentStage)
         stageManager.update(cameraY: cameraNode.position.y, sceneSize: size)
+
+        isPaused = true
+        Potato.preloadEvolutionTextures { [weak self] in
+            guard let self else { return }
+            self.potato.applyEvolutionTexture(for: .sadPotato)
+            self.gameplayReady = true
+            self.isPaused = false
+        }
     }
 
     override func update(_ currentTime: TimeInterval) {
+        guard gameplayReady else { return }
         potato.move(horizontalDirection: gameState.horizontalInput)
         clampPlayerToSceneBounds()
+        updateProgression()
         followPlayerUpward()
         stageManager.update(cameraY: cameraNode.position.y, sceneSize: size)
     }
 
     // Lower-screen touches hold left/right; an upper-screen touch requests a jump.
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard gameplayReady else { return }
         for touch in touches {
             let location = touch.location(in: self)
             let visibleBottom = cameraNode.position.y - size.height / 2
@@ -99,6 +115,7 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
         if cameraNode.position.y == 0 {
             cameraNode.position.y = size.height / 2
         }
+        hud.updateLayout(sceneSize: size, safeAreaInsets: safeAreaInsets)
     }
 
     private func updateHorizontalInput() {
@@ -131,5 +148,16 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
     private func followPlayerUpward() {
         let desiredCameraY = potato.position.y - size.height * 0.12
         cameraNode.position.y = max(cameraNode.position.y, desiredCameraY)
+    }
+
+    private func updateProgression() {
+        let progress = gameState.record(verticalPosition: potato.position.y)
+        for stage in progress.stagesReached {
+            potato.applyEvolutionTexture(for: stage)
+            print("[PROGRESSION] Reached stage \(stage.rawValue): \(stage.displayName)")
+        }
+        if progress.scoreChanged || !progress.stagesReached.isEmpty {
+            hud.update(score: gameState.score, stage: gameState.currentStage)
+        }
     }
 }

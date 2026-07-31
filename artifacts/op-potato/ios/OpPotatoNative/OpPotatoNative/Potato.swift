@@ -1,9 +1,12 @@
 import SpriteKit
+import UIKit
 
-/// The player node owns its visual placeholder and physics configuration.
+/// The player owns fixed geometry; evolution swaps only its transparent texture.
 final class Potato: SKSpriteNode {
+    private static var evolutionTextures: [EvolutionStage: SKTexture] = [:]
+
     init() {
-        super.init(texture: nil, color: .brown, size: GameConstants.playerSize)
+        super.init(texture: nil, color: .clear, size: GameConstants.playerSize)
 
         let body = SKPhysicsBody(rectangleOf: size)
         body.allowsRotation = false
@@ -19,6 +22,33 @@ final class Potato: SKSpriteNode {
 
     required init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
+    }
+
+    static func preloadEvolutionTextures(completion: @escaping () -> Void) {
+        var loadedTextures: [EvolutionStage: SKTexture] = [:]
+        for stage in EvolutionStage.allCases {
+            guard let image = UIImage(named: stage.textureName) else {
+                print("[TEXTURE ERROR] Missing required potato texture: \(stage.textureName)")
+                continue
+            }
+            loadedTextures[stage] = SKTexture(image: image)
+        }
+
+        evolutionTextures = loadedTextures
+        let textures = Array(loadedTextures.values)
+        guard !textures.isEmpty else {
+            completion()
+            return
+        }
+        SKTexture.preload(textures, withCompletionHandler: completion)
+    }
+
+    func applyEvolutionTexture(for stage: EvolutionStage) {
+        guard let stageTexture = Self.evolutionTextures[stage] else {
+            print("[TEXTURE ERROR] Cannot apply missing potato texture: \(stage.textureName)")
+            return
+        }
+        texture = stageTexture
     }
 
     func move(horizontalDirection: CGFloat) {
