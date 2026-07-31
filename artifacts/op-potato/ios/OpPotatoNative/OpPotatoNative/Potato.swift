@@ -11,13 +11,7 @@ final class Potato: SKSpriteNode {
         alpha = 1
         xScale = 1
         yScale = 1
-
-        let debugFrame = SKShapeNode(rectOf: size)
-        debugFrame.strokeColor = .red
-        debugFrame.fillColor = .clear
-        debugFrame.lineWidth = 2
-        debugFrame.zPosition = 1
-        addChild(debugFrame)
+        isHidden = false
 
         let body = SKPhysicsBody(rectangleOf: size)
         body.allowsRotation = false
@@ -35,7 +29,7 @@ final class Potato: SKSpriteNode {
         super.init(coder: aDecoder)
     }
 
-    static func preloadEvolutionTextures(completion: @escaping () -> Void) {
+    static func preloadEvolutionTextures(completion: @escaping @MainActor @Sendable () -> Void) {
         var loadedTextures: [EvolutionStage: SKTexture] = [:]
         for stage in EvolutionStage.allCases {
             guard let image = UIImage(named: stage.textureName) else {
@@ -51,7 +45,11 @@ final class Potato: SKSpriteNode {
             completion()
             return
         }
-        SKTexture.preload(textures, withCompletionHandler: completion)
+        SKTexture.preload(textures) {
+            Task { @MainActor in
+                completion()
+            }
+        }
     }
 
     func applyEvolutionTexture(for stage: EvolutionStage) {
@@ -60,13 +58,6 @@ final class Potato: SKSpriteNode {
             return
         }
         texture = stageTexture
-        print("[PLAYER DEBUG] texture assigned: \(stage.textureName)")
-    }
-
-    func printRenderingDiagnostics() {
-        print("[PLAYER DEBUG] position: \(position)")
-        print("[PLAYER DEBUG] size: \(size)")
-        print("[PLAYER DEBUG] zPosition: \(zPosition)")
     }
 
     func move(horizontalDirection: CGFloat) {

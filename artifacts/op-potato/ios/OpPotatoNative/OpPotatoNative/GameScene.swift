@@ -12,8 +12,9 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
     private var movementTouches: [ObjectIdentifier: CGPoint] = [:]
     private var safeAreaInsets = UIEdgeInsets.zero
     private var gameplayReady = false
+    private var texturesReady = false
     private var worldSetupComplete = false
-    private var playerCenteredForCoordinateDebugging = false
+    private var startupLogPrinted = false
 
     override func didMove(to view: SKView) {
         backgroundColor = SKColor(red: 0.45, green: 0.78, blue: 0.96, alpha: 1)
@@ -30,27 +31,14 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
         addChild(playerPositionDebugNode)
         addChild(potato)
         safeAreaInsets = view.safeAreaInsets
-        layoutScene()
-
-        let startingY = safeAreaInsets.bottom + GameConstants.platformBottomMargin
-        let startingPlatform = stageManager.configure(in: self, sceneWidth: size.width, startingY: startingY)
-        potato.position = CGPoint(
-            x: size.width / 2,
-            y: startingPlatform.position.y + startingPlatform.size.height / 2 + potato.size.height / 2 + 2
-        )
-        gameState.beginProgressTracking(at: potato.position.y)
-        hud.update(score: gameState.score, stage: gameState.currentStage)
-        stageManager.update(cameraY: cameraNode.position.y, sceneSize: size)
-        worldSetupComplete = true
-        centerPlayerForCoordinateDebuggingIfPossible()
-
         isPaused = true
+        layoutScene()
+        setUpWorldIfPossible()
         Potato.preloadEvolutionTextures { [weak self] in
             guard let self else { return }
             self.potato.applyEvolutionTexture(for: .sadPotato)
-            self.potato.printRenderingDiagnostics()
-            self.gameplayReady = true
-            self.isPaused = false
+            self.texturesReady = true
+            self.finishStartupIfReady()
         }
     }
 
@@ -126,7 +114,7 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
             cameraNode.position.y = size.height / 2
         }
         hud.updateLayout(sceneSize: size, safeAreaInsets: safeAreaInsets)
-        centerPlayerForCoordinateDebuggingIfPossible()
+        setUpWorldIfPossible()
     }
 
     private func updateHorizontalInput() {
@@ -172,23 +160,34 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
         }
     }
 
-    private func centerPlayerForCoordinateDebuggingIfPossible() {
-        guard worldSetupComplete, !playerCenteredForCoordinateDebugging, size.width > 0, size.height > 0 else { return }
-        playerCenteredForCoordinateDebugging = true
+    private func setUpWorldIfPossible() {
+        guard !worldSetupComplete, size.width > 0, size.height > 0 else { return }
+        worldSetupComplete = true
 
+        let startingY = safeAreaInsets.bottom + GameConstants.platformBottomMargin
+        _ = stageManager.configure(in: self, sceneWidth: size.width, startingY: startingY)
+        potato.position = cameraNode.position
+        playerPositionDebugNode.position = potato.position
+        gameState.beginProgressTracking(at: potato.position.y)
+        hud.update(score: gameState.score, stage: gameState.currentStage)
+        stageManager.update(cameraY: cameraNode.position.y, sceneSize: size)
+        finishStartupIfReady()
+    }
+
+    private func finishStartupIfReady() {
+        guard worldSetupComplete, texturesReady else { return }
         let visibleBounds = CGRect(
             x: cameraNode.position.x - size.width / 2,
             y: cameraNode.position.y - size.height / 2,
             width: size.width,
             height: size.height
         )
-        potato.position = cameraNode.position
-        playerPositionDebugNode.position = potato.position
-
-        print("[COORDINATE DEBUG] scene anchorPoint: \(anchorPoint)")
-        print("[COORDINATE DEBUG] camera position: \(cameraNode.position)")
-        print("[COORDINATE DEBUG] visible scene bounds: \(visibleBounds)")
-        print("[COORDINATE DEBUG] player uses scene coordinates: \(potato.parent === self)")
-        print("[COORDINATE DEBUG] player centered at: \(potato.position)")
+        if !startupLogPrinted {
+            startupLogPrinted = true
+            let parentName = potato.parent.map { String(describing: type(of: $0)) } ?? "nil"
+            print("[PLAYER STARTUP] anchor=\(anchorPoint) sceneSize=\(size) scaleMode=\(scaleMode) camera=\(cameraNode.position) visibleBounds=\(visibleBounds) playerPosition=\(potato.position) playerSize=\(potato.size) parent=\(parentName) alpha=\(potato.alpha) scale=(\(potato.xScale), \(potato.yScale)) hidden=\(potato.isHidden) zPosition=\(potato.zPosition)")
+        }
+        gameplayReady = true
+        isPaused = false
     }
 }
