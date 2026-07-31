@@ -2332,14 +2332,14 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       return a;
     };
     soundsRef.current = {
-      potatoBoard:   load("/sounds/Impact_potato_board.ogg",   false, 0.50),
-      fryBoard:      load("/sounds/Impact_fry_board.ogg",      false, 0.50),
-      potatoSack:    load("/sounds/Impact_potato_sack.ogg",    false, 0.50),
-      frySack:       load("/sounds/Impact_fry_sack.ogg",       false, 0.50),
-      potatoSheet:   load("/sounds/Impact_potato_sheet.ogg",   false, 0.50),
-      frySheet:      load("/sounds/Impact_fry_sheet.ogg",      false, 0.50),
-      potatoCounter: load("/sounds/Impact_potato_counter.ogg", false, 0.50),
-      fryCounter:    load("/sounds/Impact_fry_counter.ogg",    false, 0.50),
+      potatoBoard:   load("/sounds/bong_001.mp3", false, 0.50),
+      fryBoard:      load("/sounds/bong_001.mp3", false, 0.50),
+      potatoSack:    load("/sounds/bong_001.mp3", false, 0.50),
+      frySack:       load("/sounds/bong_001.mp3", false, 0.50),
+      potatoSheet:   load("/sounds/bong_001.mp3", false, 0.50),
+      frySheet:      load("/sounds/bong_001.mp3", false, 0.50),
+      potatoCounter: load("/sounds/bong_001.mp3", false, 0.50),
+      fryCounter:    load("/sounds/bong_001.mp3", false, 0.50),
       heal:          load("/sounds/Impact_heal.ogg",           false, 0.60),
       hazardGrate:   load("/sounds/Hazard_Grate.ogg",          false, 0.70),
       hazardPeel:    load("/sounds/Hazard_Peeler.ogg",         false, 0.70),
