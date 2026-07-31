@@ -1,11 +1,41 @@
 import SpriteKit
 
-/// Platforms are static collision surfaces managed by the scene.
+/// Visual types share one collision contract; healing behavior is intentionally deferred.
 final class Platform: SKSpriteNode {
-    init() {
-        super.init(texture: nil, color: .darkGray, size: GameConstants.platformSize)
+    enum Kind: CaseIterable {
+        case cuttingBoard
+        case bakingSheet
+        case countertop
+        case healing
 
-        let body = SKPhysicsBody(rectangleOf: size)
+        var baseSize: CGSize {
+            switch self {
+            case .cuttingBoard: CGSize(width: 150, height: 18)
+            case .bakingSheet: CGSize(width: 130, height: 16)
+            case .countertop: CGSize(width: 175, height: 20)
+            case .healing: CGSize(width: 120, height: 18)
+            }
+        }
+
+        var color: SKColor {
+            switch self {
+            case .cuttingBoard: .brown
+            case .bakingSheet: .lightGray
+            case .countertop: SKColor(white: 0.08, alpha: 1)
+            case .healing: .systemGreen
+            }
+        }
+    }
+
+    let kind: Kind
+
+    init(kind: Kind, widthScale: CGFloat = 1) {
+        self.kind = kind
+        let baseSize = kind.baseSize
+        let scaledSize = CGSize(width: baseSize.width * widthScale, height: baseSize.height)
+        super.init(texture: nil, color: kind.color, size: scaledSize)
+
+        let body = SKPhysicsBody(rectangleOf: scaledSize)
         body.isDynamic = false
         body.friction = 0
         body.restitution = 0
@@ -16,6 +46,6 @@ final class Platform: SKSpriteNode {
     }
 
     required init?(coder aDecoder: NSCoder) {
-        super.init(coder: aDecoder)
+        nil
     }
 }

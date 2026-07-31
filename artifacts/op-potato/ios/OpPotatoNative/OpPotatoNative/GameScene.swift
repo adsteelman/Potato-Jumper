@@ -5,7 +5,7 @@ import UIKit
 final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
     private let gameState = GameState()
     private let potato = Potato()
-    private let groundPlatform = Platform()
+    private let stageManager = StageManager()
     private let cameraNode = SKCameraNode()
     private var movementTouches: [ObjectIdentifier: CGPoint] = [:]
     private var safeAreaInsets = UIEdgeInsets.zero
@@ -18,22 +18,33 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
 
         addChild(cameraNode)
         camera = cameraNode
-        addChild(groundPlatform)
         addChild(potato)
         safeAreaInsets = view.safeAreaInsets
         layoutScene()
+
+        let startingY = safeAreaInsets.bottom + GameConstants.platformBottomMargin
+        let startingPlatform = stageManager.configure(in: self, sceneWidth: size.width, startingY: startingY)
+        potato.position = CGPoint(
+            x: size.width / 2,
+            y: startingPlatform.position.y + startingPlatform.size.height / 2 + potato.size.height / 2 + 2
+        )
+        stageManager.update(cameraY: cameraNode.position.y, sceneSize: size)
     }
 
     override func update(_ currentTime: TimeInterval) {
         potato.move(horizontalDirection: gameState.horizontalInput)
         clampPlayerToSceneBounds()
+        followPlayerUpward()
+        stageManager.update(cameraY: cameraNode.position.y, sceneSize: size)
     }
 
     // Lower-screen touches hold left/right; an upper-screen touch requests a jump.
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             let location = touch.location(in: self)
-            if location.y >= size.height * GameConstants.jumpControlHeightRatio {
+            let visibleBottom = cameraNode.position.y - size.height / 2
+            let jumpThreshold = visibleBottom + size.height * GameConstants.jumpControlHeightRatio
+            if location.y >= jumpThreshold {
                 attemptJump()
             } else {
                 movementTouches[ObjectIdentifier(touch)] = location
@@ -84,13 +95,9 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
 
     private func layoutScene() {
         guard size.width > 0, size.height > 0 else { return }
-        cameraNode.position = CGPoint(x: size.width / 2, y: size.height / 2)
-        groundPlatform.position = CGPoint(
-            x: size.width / 2,
-            y: safeAreaInsets.bottom + GameConstants.platformBottomMargin
-        )
-        if potato.parent != nil, potato.position == .zero {
-            potato.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        cameraNode.position.x = size.width / 2
+        if cameraNode.position.y == 0 {
+            cameraNode.position.y = size.height / 2
         }
     }
 
@@ -119,5 +126,10 @@ final class GameScene: SKScene, @MainActor SKPhysicsContactDelegate {
         let minimumX = safeAreaInsets.left + halfWidth + GameConstants.horizontalEdgeInset
         let maximumX = size.width - safeAreaInsets.right - halfWidth - GameConstants.horizontalEdgeInset
         potato.position.x = min(maximumX, max(minimumX, potato.position.x))
+    }
+
+    private func followPlayerUpward() {
+        let desiredCameraY = potato.position.y - size.height * 0.12
+        cameraNode.position.y = max(cameraNode.position.y, desiredCameraY)
     }
 }
