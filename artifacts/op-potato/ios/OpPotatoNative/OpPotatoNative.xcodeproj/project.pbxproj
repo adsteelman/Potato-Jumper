@@ -19,6 +19,7 @@
 		AA0000110000000000000011 /* Hazard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000110000000000000011 /* Hazard.swift */; };
 		AA0000120000000000000012 /* PowerUp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000120000000000000012 /* PowerUp.swift */; };
 		AA0000130000000000000013 /* HUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000130000000000000013 /* HUD.swift */; };
+		AA0000140000000000000014 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB0000160000000000000016 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +38,7 @@
 		BB0000130000000000000013 /* HUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HUD.swift; sourceTree = "<group>"; };
 		BB0000140000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BB0000150000000000000015 /* OpPotatoNative.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OpPotatoNative.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000160000000000000016 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -74,6 +76,7 @@
 				BB0000120000000000000012 /* PowerUp.swift */,
 				BB0000130000000000000013 /* HUD.swift */,
 				BB0000140000000000000014 /* Info.plist */,
+				BB0000160000000000000016 /* Assets.xcassets */,
 			);
 			path = OpPotatoNative;
 			sourceTree = "<group>";
@@ -131,7 +134,7 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		CC0000030000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		CC0000030000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (AA0000140000000000000014 /* Assets.xcassets in Resources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -163,7 +166,6 @@
 		110000030000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -182,7 +184,6 @@
 		110000040000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;

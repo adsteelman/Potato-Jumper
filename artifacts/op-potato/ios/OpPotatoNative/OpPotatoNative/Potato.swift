@@ -7,6 +7,17 @@ final class Potato: SKSpriteNode {
 
     init() {
         super.init(texture: nil, color: .clear, size: GameConstants.playerSize)
+        zPosition = 10
+        alpha = 1
+        xScale = 1
+        yScale = 1
+
+        let debugFrame = SKShapeNode(rectOf: size)
+        debugFrame.strokeColor = .red
+        debugFrame.fillColor = .clear
+        debugFrame.lineWidth = 2
+        debugFrame.zPosition = 1
+        addChild(debugFrame)
 
         let body = SKPhysicsBody(rectangleOf: size)
         body.allowsRotation = false
@@ -49,6 +60,13 @@ final class Potato: SKSpriteNode {
             return
         }
         texture = stageTexture
+        print("[PLAYER DEBUG] texture assigned: \(stage.textureName)")
+    }
+
+    func printRenderingDiagnostics() {
+        print("[PLAYER DEBUG] position: \(position)")
+        print("[PLAYER DEBUG] size: \(size)")
+        print("[PLAYER DEBUG] zPosition: \(zPosition)")
     }
 
     func move(horizontalDirection: CGFloat) {
