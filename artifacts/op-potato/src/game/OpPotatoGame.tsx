@@ -155,6 +155,62 @@ const MUSIC_PREF_KEY = "oppotato:musicOn";
 const SOUND_PREF_KEY = "oppotato:soundOn";
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUDIO_DIAGNOSTIC_DISABLED = true;
+const SPRITE_PREPROCESS_MAX_DIMENSION = 512;
+const LEADERBOARD_REQUEST_TIMEOUT_MS = 10_000;
+
+class RequestTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RequestTimeoutError";
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+async function runWithTimeout<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (signal?.aborted) throw new DOMException("Request aborted", "AbortError");
+
+  const controller = new AbortController();
+  let timedOut = false;
+  const handleAbort = () => controller.abort();
+  signal?.addEventListener("abort", handleAbort, { once: true });
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await operation(controller.signal);
+  } catch (error) {
+    if (timedOut) throw new RequestTimeoutError(`Request timed out after ${timeoutMs}ms`);
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+    signal?.removeEventListener("abort", handleAbort);
+  }
+}
+
+function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(new DOMException("Request aborted", "AbortError"));
+
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      signal.removeEventListener("abort", handleAbort);
+      resolve();
+    }, ms);
+    const handleAbort = () => {
+      window.clearTimeout(timeout);
+      reject(new DOMException("Request aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", handleAbort, { once: true });
+  });
+}
 
 function loadAudioPref(key: string): boolean {
   if (typeof window === "undefined") return true;
@@ -644,7 +700,7 @@ function drawPotato(
   // ── SPRITE DRAWING (when images are loaded) ───────────────────────────────
   if (sprites) {
     const img = state === "fry" ? sprites.fry[si] : sprites.potato[si];
-    if (img) {
+    if (img?.width && img.height) {
       // Stage 4 golden glow ring (both potato and fry)
       if (si === 4) {
         const gr = pw * 1.5 + flexBump * 45;
@@ -1307,9 +1363,10 @@ function drawDeadScreen(ctx: CanvasRenderingContext2D, score: number, bestScore:
 
   // Mashed potato sprite or fallback emoji
   ctx.textAlign = "center";
-  if (sprites?.gameOver) {
+  const gameOverSprite = sprites?.gameOver;
+  if (gameOverSprite?.width && gameOverSprite.height) {
     const goW = 138, goH = 92;
-    ctx.drawImage(sprites.gameOver, CANVAS_W / 2 - goW / 2, DEAD_PY + 6, goW, goH);
+    ctx.drawImage(gameOverSprite, CANVAS_W / 2 - goW / 2, DEAD_PY + 6, goW, goH);
   } else {
     ctx.font = "56px 'Fredoka One', cursive";
     ctx.fillText("🥣", CANVAS_W / 2, DEAD_PY + 65);
@@ -2154,6 +2211,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   const safeAreaRef = useRef<SafeAreaInsets>({ top: 0, right: 0, bottom: 0, left: 0 });
   const stateRef = useRef<GameState>(makeInitialState(0));
   const rafRef = useRef<number>(0);
+  const renderLoopRunningRef = useRef(false);
   const lastTRef = useRef<number>(0);
   const tapDirRef = useRef(0);
   const leftHeldRef = useRef(false);
@@ -2174,6 +2232,11 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const pendingScoreRef = useRef({ score: 0, stageReached: 0 });
+  const componentMountedRef = useRef(true);
+  const leaderboardRequestRef = useRef<AbortController | null>(null);
+  const submissionRequestRef = useRef<AbortController | null>(null);
+  const submissionInFlightRef = useRef(false);
+  const submissionIdentityRef = useRef<{ sessionKey: string; submissionId: string } | null>(null);
   const spritesRef = useRef<SpriteMap | null>(null);
   const soundsRef = useRef<{
     potatoBoard: HTMLAudioElement | null;
@@ -2224,44 +2287,81 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   // Load sprite images once on mount
   useEffect(() => {
     let active = true;
+    let preprocessingQueue = Promise.resolve();
+    const loadingImages = new Set<HTMLImageElement>();
     // Preload Fredoka One so canvas draws it immediately
     document.fonts.load("16px 'Fredoka One'").catch(() => {});
     // Loads a sprite and restores near-white semi-transparent pixels to fully opaque.
     // Background-removal tools often make white sprite detail (fur, teeth, bandage) transparent;
     // this one-time pixel pass fixes that before the first draw.
     const spriteReadyPromises: Promise<void>[] = [];
-    const waitForImageLoad = (img: HTMLImageElement) => new Promise<void>((resolve, reject) => {
+    const yieldToMainThread = () => new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    const waitForImageLoad = (img: HTMLImageElement, src: string) => new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        img.removeEventListener("load", handleLoad);
+        img.removeEventListener("error", handleError);
+      };
+      const handleLoad = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve();
+      };
+      const handleError = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error(`Failed to load sprite: ${src}`));
+      };
+      img.addEventListener("load", handleLoad);
+      img.addEventListener("error", handleError);
+      img.src = src;
       if (img.complete) {
-        if (img.naturalWidth > 0) resolve();
-        else reject(new Error(`Failed to load sprite: ${img.src}`));
-        return;
+        queueMicrotask(() => {
+          if (img.naturalWidth > 0) handleLoad();
+          else handleError();
+        });
       }
-      img.addEventListener("load", () => resolve(), { once: true });
-      img.addEventListener("error", () => reject(new Error(`Failed to load sprite: ${img.src}`)), { once: true });
     });
     const loadSprite = (src: string): HTMLCanvasElement => {
       const canvas = document.createElement("canvas");
       const img = new Image();
-      img.src = src;
-      const decoded = typeof img.decode === "function"
-        ? img.decode().catch(() => waitForImageLoad(img))
-        : waitForImageLoad(img);
-      const ready = decoded.then(() => {
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const c = canvas.getContext("2d");
-        if (!c) return;
-        c.drawImage(img, 0, 0);
-        const imageData = c.getImageData(0, 0, canvas.width, canvas.height);
-        const d = imageData.data;
-        for (let i = 0; i < d.length; i += 4) {
-          const r = d[i], g = d[i + 1], b = d[i + 2], a = d[i + 3];
-          // Near-white pixel that is semi-transparent → make fully opaque
-          if (r > 180 && g > 180 && b > 180 && a > 10 && a < 250) {
-            d[i + 3] = 255;
-          }
-        }
-        c.putImageData(imageData, 0, 0);
+      img.decoding = "async";
+      loadingImages.add(img);
+      const loaded = waitForImageLoad(img, src).then(async () => {
+        if (typeof img.decode === "function") await img.decode().catch(() => {});
+      });
+      const ready = loaded.then(() => {
+        const preprocess = preprocessingQueue
+          .then(yieldToMainThread)
+          .then(() => {
+            if (!active) return;
+            const sourceWidth = img.naturalWidth;
+            const sourceHeight = img.naturalHeight;
+            const scale = Math.min(1, SPRITE_PREPROCESS_MAX_DIMENSION / Math.max(sourceWidth, sourceHeight));
+            canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+            canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+            const c = canvas.getContext("2d");
+            if (!c) return;
+            c.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const imageData = c.getImageData(0, 0, canvas.width, canvas.height);
+            const d = imageData.data;
+            for (let i = 0; i < d.length; i += 4) {
+              const r = d[i], g = d[i + 1], b = d[i + 2], a = d[i + 3];
+              // Near-white pixel that is semi-transparent → make fully opaque
+              if (r > 180 && g > 180 && b > 180 && a > 10 && a < 250) {
+                d[i + 3] = 255;
+              }
+            }
+            c.putImageData(imageData, 0, 0);
+          });
+        preprocessingQueue = preprocess.catch(() => {});
+        return preprocess;
+      }).catch((error) => {
+        if (active) console.warn("[stability] Sprite unavailable; using fallback", { src, error });
+      }).finally(() => {
+        loadingImages.delete(img);
       });
       spriteReadyPromises.push(ready);
       return canvas;
@@ -2294,11 +2394,16 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       cloud: loadImg("/sprites/cloud.png"),
       title: loadImg("/sprites/title.png"),
     };
-    Promise.all(spriteReadyPromises).then(
-      () => { if (active) markAssetGroupReady("sprites"); },
-      (error) => logAudioFailure("preload gameplay sprites", error),
-    );
-    return () => { active = false; };
+    Promise.all(spriteReadyPromises).then(() => {
+      if (active) markAssetGroupReady("sprites");
+    });
+    return () => {
+      active = false;
+      loadingImages.forEach((img) => {
+        img.src = "";
+      });
+      loadingImages.clear();
+    };
   }, [markAssetGroupReady]);
 
   // Load sounds
@@ -2497,40 +2602,77 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     gestureMusicStartRef.current = true;
   }, [ensureTemporaryImpactAudio]);
 
-  const fetchLeaderboard = useCallback(async () => {
+  const fetchLeaderboard = useCallback(async (parentSignal?: AbortSignal) => {
+    leaderboardRequestRef.current?.abort();
+    const controller = new AbortController();
+    leaderboardRequestRef.current = controller;
+    const handleParentAbort = () => controller.abort();
+    parentSignal?.addEventListener("abort", handleParentAbort, { once: true });
     setLeaderboardLoading(true);
     const requestUrl = `${API_BASE}/api/leaderboard`;
     try {
-      const res = await fetch(requestUrl);
-      const responseBody = await res.text();
+      const { res, responseBody } = await runWithTimeout(
+        async (signal) => {
+          const res = await fetch(requestUrl, { signal });
+          const responseBody = await res.text();
+          return { res, responseBody };
+        },
+        LEADERBOARD_REQUEST_TIMEOUT_MS,
+        controller.signal,
+      );
       if (!res.ok) throw new Error(`Leaderboard GET failed with status ${res.status}`);
       const entries: LeaderboardEntry[] = JSON.parse(responseBody);
-      setLeaderboardEntries(entries);
-    } catch {
-      setLeaderboardEntries([]);
+      if (leaderboardRequestRef.current === controller && componentMountedRef.current) {
+        setLeaderboardEntries(entries);
+      }
+    } catch (error) {
+      if (leaderboardRequestRef.current === controller && componentMountedRef.current && !isAbortError(error)) {
+        if (error instanceof RequestTimeoutError) {
+          console.warn("[stability] Leaderboard GET timed out", { timeoutMs: LEADERBOARD_REQUEST_TIMEOUT_MS });
+        }
+        setLeaderboardEntries([]);
+      }
+    } finally {
+      parentSignal?.removeEventListener("abort", handleParentAbort);
+      if (leaderboardRequestRef.current === controller) {
+        leaderboardRequestRef.current = null;
+        if (componentMountedRef.current) setLeaderboardLoading(false);
+      }
     }
-    setLeaderboardLoading(false);
   }, []);
 
   const submitScore = useCallback(async (name: string) => {
     const trimmed = name.trim().slice(0, 12);
-    if (!trimmed) return;
+    if (!trimmed || submissionInFlightRef.current) return;
+    submissionInFlightRef.current = true;
+    const controller = new AbortController();
+    submissionRequestRef.current = controller;
     setSubmitting(true);
     setSubmitError("");
     const requestUrl = `${API_BASE}/api/leaderboard`;
-    const submissionId = crypto.randomUUID();
+    const pendingScore = pendingScoreRef.current;
+    const sessionKey = JSON.stringify([trimmed, pendingScore.score, pendingScore.stageReached]);
+    if (submissionIdentityRef.current?.sessionKey !== sessionKey) {
+      submissionIdentityRef.current = { sessionKey, submissionId: crypto.randomUUID() };
+    }
+    const submissionId = submissionIdentityRef.current.submissionId;
     try {
       const requestBody = JSON.stringify({
         submissionId,
         playerName: trimmed,
-        score: pendingScoreRef.current.score,
-        stageReached: pendingScoreRef.current.stageReached,
+        score: pendingScore.score,
+        stageReached: pendingScore.stageReached,
       });
-      const sendRequest = () => fetch(requestUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: requestBody,
-      });
+      const sendRequest = () => runWithTimeout(
+        (signal) => fetch(requestUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: requestBody,
+          signal,
+        }),
+        LEADERBOARD_REQUEST_TIMEOUT_MS,
+        controller.signal,
+      );
 
       const retryableStatuses = new Set([500, 502, 503, 504]);
       const retryDelays = [0, 2000, 4000];
@@ -2540,7 +2682,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       for (let attempt = 0; attempt < retryDelays.length; attempt++) {
         const delay = retryDelays[attempt];
         if (delay > 0) {
-          await new Promise((resolve) => window.setTimeout(resolve, delay));
+          await abortableDelay(delay, controller.signal);
         }
 
         let res: Response;
@@ -2548,6 +2690,13 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
           res = await sendRequest();
         } catch (error) {
           lastError = error;
+          if (isAbortError(error)) throw error;
+          if (error instanceof RequestTimeoutError) {
+            console.warn("[stability] Leaderboard POST timed out", {
+              attempt: attempt + 1,
+              timeoutMs: LEADERBOARD_REQUEST_TIMEOUT_MS,
+            });
+          }
           if (attempt + 1 === retryDelays.length) throw error;
           continue;
         }
@@ -2564,16 +2713,45 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       }
 
       if (!submitted) throw lastError;
-      await fetchLeaderboard();
+      await fetchLeaderboard(controller.signal);
+      if (controller.signal.aborted) return;
       setShowNameInput(false);
       setNameValue("");
       stateRef.current.phase = "leaderboard";
       setShowLeaderboard(true);
-    } catch {
-      setSubmitError("Failed to submit. Try again.");
+      submissionIdentityRef.current = null;
+    } catch (error) {
+      if (!isAbortError(error) && componentMountedRef.current) {
+        setSubmitError("Failed to submit. Try again.");
+      }
+    } finally {
+      if (submissionRequestRef.current === controller) {
+        submissionRequestRef.current = null;
+        submissionInFlightRef.current = false;
+        if (componentMountedRef.current) setSubmitting(false);
+      }
     }
-    setSubmitting(false);
   }, [fetchLeaderboard]);
+
+  const cancelLeaderboardRequests = useCallback((abandonScoreSession = false) => {
+    leaderboardRequestRef.current?.abort();
+    leaderboardRequestRef.current = null;
+    submissionRequestRef.current?.abort();
+    if (abandonScoreSession) submissionIdentityRef.current = null;
+    if (componentMountedRef.current) {
+      setLeaderboardLoading(false);
+      if (!submissionRequestRef.current) setSubmitting(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    componentMountedRef.current = true;
+    return () => {
+      componentMountedRef.current = false;
+      leaderboardRequestRef.current?.abort();
+      submissionRequestRef.current?.abort();
+    };
+  }, []);
 
   const getPixelRatio = () => {
     if (typeof window !== "undefined") return Math.min(window.devicePixelRatio || 1, 2);
@@ -2647,6 +2825,11 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
   }, [AD_BANNER_HEIGHT, adsEnabled]);
 
   const render = useCallback((t: number) => {
+    if (!renderLoopRunningRef.current || document.hidden) {
+      renderLoopRunningRef.current = false;
+      rafRef.current = 0;
+      return;
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -2740,7 +2923,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.restore();
 
-      rafRef.current = requestAnimationFrame(render);
+      if (renderLoopRunningRef.current) rafRef.current = requestAnimationFrame(render);
       return;
     }
 
@@ -2860,34 +3043,53 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     
     ctx.restore();
 
-    rafRef.current = requestAnimationFrame(render);
+    if (renderLoopRunningRef.current) rafRef.current = requestAnimationFrame(render);
   }, []);
 
   // Start game loop
   useEffect(() => {
     resizeCanvas();
-    lastTRef.current = performance.now();
-    rafRef.current = requestAnimationFrame(render);
     const onResize = () => resizeCanvas();
-    window.addEventListener("resize", onResize);
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-      window.removeEventListener("resize", onResize);
+    const stopRenderLoop = () => {
+      renderLoopRunningRef.current = false;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+      tapDirRef.current = 0;
+      clearHeldKeys();
     };
-  }, [render, resizeCanvas]);
-
-  useEffect(() => {
-    const handleWindowBlur = () => clearHeldKeys();
+    const startRenderLoop = () => {
+      if (renderLoopRunningRef.current || document.hidden) return;
+      renderLoopRunningRef.current = true;
+      lastTRef.current = performance.now();
+      rafRef.current = requestAnimationFrame(render);
+    };
     const handleVisibilityChange = () => {
-      if (document.hidden) clearHeldKeys();
+      if (document.hidden) stopRenderLoop();
+      else startRenderLoop();
     };
+    const handlePageHide = () => stopRenderLoop();
+    const handlePageShow = () => startRenderLoop();
+    const handleWindowBlur = () => {
+      tapDirRef.current = 0;
+      clearHeldKeys();
+    };
+
+    window.addEventListener("resize", onResize);
     window.addEventListener("blur", handleWindowBlur);
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("pageshow", handlePageShow);
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    startRenderLoop();
+
     return () => {
+      stopRenderLoop();
+      window.removeEventListener("resize", onResize);
       window.removeEventListener("blur", handleWindowBlur);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pageshow", handlePageShow);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [clearHeldKeys]);
+  }, [clearHeldKeys, render, resizeCanvas]);
 
   const focusGameplay = useCallback(() => {
     tapDirRef.current = 0;
@@ -2977,6 +3179,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       if (x >= DEAD_REPLAY_BTN.x && x <= DEAD_REPLAY_BTN.x + DEAD_REPLAY_BTN.w &&
           y >= DEAD_REPLAY_BTN.y && y <= DEAD_REPLAY_BTN.y + DEAD_REPLAY_BTN.h) {
         if (!assetsReady) return;
+        cancelLeaderboardRequests(true);
         const best = gs.bestScore;
         clearHeldKeys();
         Object.assign(stateRef.current, makeInitialState(best));
@@ -3006,6 +3209,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       if (x >= WIN_REPLAY_BTN.x && x <= WIN_REPLAY_BTN.x + WIN_REPLAY_BTN.w &&
           y >= WIN_REPLAY_BTN.y && y <= WIN_REPLAY_BTN.y + WIN_REPLAY_BTN.h) {
         if (!assetsReady) return;
+        cancelLeaderboardRequests(true);
         const best = gs.bestScore;
         clearHeldKeys();
         Object.assign(stateRef.current, makeInitialState(best));
@@ -3032,7 +3236,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       tapDirRef.current = x < CANVAS_W / 2 ? -1 : 1;
       return;
     }
-  }, [assetsReady, fetchLeaderboard, startAudioFromGesture]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [assetsReady, cancelLeaderboardRequests, fetchLeaderboard, startAudioFromGesture]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePointerUp = useCallback(() => {
     tapDirRef.current = 0;
@@ -3058,6 +3262,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       }
       if (gs.phase === "dead" || gs.phase === "won") {
         if (!assetsReady) return;
+        cancelLeaderboardRequests(true);
         focusGameplay();
         const best = gs.bestScore;
         clearHeldKeys();
@@ -3078,7 +3283,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [assetsReady, showSplash, showHelp, showNameInput, focusGameplay, clearHeldKeys]);
+  }, [assetsReady, showSplash, showHelp, showNameInput, focusGameplay, clearHeldKeys, cancelLeaderboardRequests]);
 
   return (
     <div
@@ -3136,6 +3341,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
           adBannerH={AD_BANNER_H}
           onPlayAgain={() => {
             if (!assetsReady) return;
+            cancelLeaderboardRequests(true);
             const best = stateRef.current.bestScore;
             clearHeldKeys();
             Object.assign(stateRef.current, makeInitialState(best));
@@ -3210,7 +3416,11 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
               {submitting ? "Submitting…" : "Submit →"}
             </button>
             <button
-              onClick={() => { setShowNameInput(false); setSubmitError(""); }}
+              onClick={() => {
+                cancelLeaderboardRequests();
+                setShowNameInput(false);
+                setSubmitError("");
+              }}
               style={{
                 background: "none", border: "none", color: "rgba(255,255,255,0.45)",
                 fontSize: 13, cursor: "pointer", fontFamily: "sans-serif",
