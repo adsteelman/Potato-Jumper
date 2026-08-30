@@ -92,7 +92,6 @@ export function SplashScreen({ onStart, onHelp, adBannerH }: Props) {
               width: 180,
               height: 180,
               objectFit: "contain",
-              filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.22))",
             }}
           />
         </div>
