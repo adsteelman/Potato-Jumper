@@ -7,6 +7,10 @@ import {
   type AdMobError,
 } from "@capacitor-community/admob";
 
+// Ads are intentionally disabled for the 1.0 App Store release. Keep the
+// integration in place so it can be re-enabled without restoring native code.
+export const ADS_ENABLED = false;
+
 const IOS_TEST_BANNER_ID = "ca-app-pub-3940256099942544/2435281174";
 const ANDROID_TEST_BANNER_ID = "ca-app-pub-3940256099942544/6300978111";
 
@@ -16,7 +20,7 @@ function isSupportedNativePlatform(platform: string): platform is "ios" | "andro
 
 export async function initializeAdMobBanner(): Promise<() => Promise<void>> {
   const platform = Capacitor.getPlatform();
-  if (!isSupportedNativePlatform(platform)) return async () => {};
+  if (!ADS_ENABLED || !isSupportedNativePlatform(platform)) return async () => {};
 
   const listeners: PluginListenerHandle[] = [];
 
@@ -51,5 +55,5 @@ export async function initializeAdMobBanner(): Promise<() => Promise<void>> {
 }
 
 export function supportsAdMobBanner(): boolean {
-  return isSupportedNativePlatform(Capacitor.getPlatform());
+  return ADS_ENABLED && isSupportedNativePlatform(Capacitor.getPlatform());
 }
