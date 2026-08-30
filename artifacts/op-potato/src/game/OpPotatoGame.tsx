@@ -2201,7 +2201,7 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     mashed: null, powerUp: null, bgMusic: null,
   });
   const prevPhaseRef = useRef<GamePhase>("menu");
-  const renderDiagnosticsRef = useRef({ phase: "menu" as GamePhase, lastCloudLogAt: 0 });
+  const renderDiagnosticsRef = useRef({ phase: "menu" as GamePhase });
   const gestureMusicStartRef = useRef(false);
   const temporaryImpactAudioRef = useRef<{
     context: AudioContext | null;
@@ -2761,10 +2761,6 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     ctx.rect(0, 0, CANVAS_W, CANVAS_H);
     ctx.clip();
 
-    if (t - renderDiagnostics.lastCloudLogAt >= 1000) {
-      console.debug("[render] clouds", { phase: gs.phase, count: gs.clouds.length, score: gs.score });
-      renderDiagnostics.lastCloudLogAt = t;
-    }
     drawBackground(ctx, gs.cameraY, gs.score, t, spritesRef.current, gs.clouds);
 
     // Draw platforms
