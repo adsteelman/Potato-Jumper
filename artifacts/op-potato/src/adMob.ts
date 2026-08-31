@@ -42,7 +42,9 @@ export async function initializeAdMobBanner(): Promise<() => Promise<void>> {
       }
     }
 
-    if (!canRequestBanner) return async () => {};
+    if (!canRequestBanner) {
+      return async () => {};
+    }
 
     listeners.push(
       await AdMob.addListener(BannerAdPluginEvents.FailedToLoad, (error: AdMobError) => {
