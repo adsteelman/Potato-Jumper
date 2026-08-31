@@ -2965,6 +2965,13 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     if (renderLoopRunningRef.current) rafRef.current = requestAnimationFrame(render);
   }, []);
 
+  const restoreGameplayFocus = useCallback(() => {
+    const gs = stateRef.current;
+    if (gs.phase !== "playing" || gs.showSettings || showSplash || showHelp || showNameInput || showLeaderboard) return;
+    tapDirRef.current = 0;
+    canvasRef.current?.focus({ preventScroll: true });
+  }, [showSplash, showHelp, showNameInput, showLeaderboard]);
+
   // Start game loop
   useEffect(() => {
     resizeCanvas();
@@ -2984,17 +2991,27 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
     };
     const handleVisibilityChange = () => {
       if (document.hidden) stopRenderLoop();
-      else startRenderLoop();
+      else {
+        startRenderLoop();
+        restoreGameplayFocus();
+      }
     };
     const handlePageHide = () => stopRenderLoop();
-    const handlePageShow = () => startRenderLoop();
+    const handlePageShow = () => {
+      startRenderLoop();
+      restoreGameplayFocus();
+    };
     const handleWindowBlur = () => {
       tapDirRef.current = 0;
       clearHeldKeys();
     };
+    const handleWindowFocus = () => {
+      restoreGameplayFocus();
+    };
 
     window.addEventListener("resize", onResize);
     window.addEventListener("blur", handleWindowBlur);
+    window.addEventListener("focus", handleWindowFocus);
     window.addEventListener("pagehide", handlePageHide);
     window.addEventListener("pageshow", handlePageShow);
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -3004,11 +3021,12 @@ export default function OpPotatoGame({ adsEnabled }: OpPotatoGameProps) {
       stopRenderLoop();
       window.removeEventListener("resize", onResize);
       window.removeEventListener("blur", handleWindowBlur);
+      window.removeEventListener("focus", handleWindowFocus);
       window.removeEventListener("pagehide", handlePageHide);
       window.removeEventListener("pageshow", handlePageShow);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [clearHeldKeys, render, resizeCanvas]);
+  }, [clearHeldKeys, render, resizeCanvas, restoreGameplayFocus]);
 
   const focusGameplay = useCallback(() => {
     tapDirRef.current = 0;

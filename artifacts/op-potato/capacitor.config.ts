@@ -7,8 +7,7 @@ const config: CapacitorConfig = {
   appName: 'Op Potato',
   webDir: 'dist/public',
   ios: {
-    // Ads are disabled for 1.0; include only the launch handoff plugin.
-    includePlugins: ['@capacitor/splash-screen'],
+    includePlugins: ['@capacitor/splash-screen', '@capacitor-community/admob'],
   },
   plugins: {
     SplashScreen: {

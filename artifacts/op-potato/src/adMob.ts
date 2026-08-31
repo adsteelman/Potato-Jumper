@@ -1,17 +1,18 @@
 import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import {
   AdMob,
+  AdmobConsentStatus,
   BannerAdPluginEvents,
   BannerAdPosition,
   BannerAdSize,
   type AdMobError,
 } from "@capacitor-community/admob";
 
-// Ads are intentionally disabled for the 1.0 App Store release. Keep the
-// integration in place so it can be re-enabled without restoring native code.
-export const ADS_ENABLED = false;
+// Keep the integration behind one switch so ads can be disabled without
+// removing the native configuration.
+export const ADS_ENABLED = true;
 
-const IOS_TEST_BANNER_ID = "ca-app-pub-3940256099942544/2435281174";
+const IOS_BANNER_ID = "ca-app-pub-4194610760979195/5322171480";
 const ANDROID_TEST_BANNER_ID = "ca-app-pub-3940256099942544/6300978111";
 
 function isSupportedNativePlatform(platform: string): platform is "ios" | "android" {
@@ -25,7 +26,23 @@ export async function initializeAdMobBanner(): Promise<() => Promise<void>> {
   const listeners: PluginListenerHandle[] = [];
 
   try {
-    await AdMob.initialize({ initializeForTesting: true });
+    await AdMob.initialize({ initializeForTesting: false });
+
+    let canRequestBanner = true;
+    if (platform === "ios") {
+      try {
+        let consentInfo = await AdMob.requestConsentInfo();
+        if (consentInfo.status === AdmobConsentStatus.REQUIRED && consentInfo.isConsentFormAvailable) {
+          consentInfo = await AdMob.showConsentForm();
+        }
+        canRequestBanner = consentInfo.canRequestAds;
+      } catch (error: unknown) {
+        canRequestBanner = false;
+        console.error("[AdMob] Consent handling failed; banner disabled for this launch", error);
+      }
+    }
+
+    if (!canRequestBanner) return async () => {};
 
     listeners.push(
       await AdMob.addListener(BannerAdPluginEvents.FailedToLoad, (error: AdMobError) => {
@@ -34,11 +51,11 @@ export async function initializeAdMobBanner(): Promise<() => Promise<void>> {
     );
 
     await AdMob.showBanner({
-      adId: platform === "ios" ? IOS_TEST_BANNER_ID : ANDROID_TEST_BANNER_ID,
+      adId: platform === "ios" ? IOS_BANNER_ID : ANDROID_TEST_BANNER_ID,
       adSize: BannerAdSize.BANNER,
       position: BannerAdPosition.BOTTOM_CENTER,
       margin: 0,
-      isTesting: true,
+      isTesting: platform !== "ios",
     });
   } catch (error: unknown) {
     console.error("[AdMob] Initialization failed", error);
